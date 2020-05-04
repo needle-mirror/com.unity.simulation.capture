@@ -9,5 +9,9 @@ namespace Unity.Simulation
         /// When false, will force capturing to not use async readback even if supported by the platform.
         /// </summary>
         public static bool useAsyncReadbackIfSupported = true;
+
+#if UNITY_2019_3_OR_NEWER
+        public static bool useBatchReadback = false;
+#endif
     }
 }

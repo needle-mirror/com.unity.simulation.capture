@@ -35,14 +35,16 @@ namespace Unity.Simulation
                     else
                     {
                         req.data = request.GetData<byte>().ToArray();
-                        req.Start(functor);
+                        req.Enqueue(functor);
+                        req.Execute();
                     }
                 });
             }
             else
             {
                 req.data = GraphicsUtilities.GetPixelsSlow(src as RenderTexture);
-                req.Start(functor);
+                req.Enqueue(functor);
+                req.Execute();
             }
 #endif
             return req;

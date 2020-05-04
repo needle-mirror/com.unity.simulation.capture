@@ -50,6 +50,34 @@ namespace Unity.Simulation
             return CaptureOptions.useAsyncReadbackIfSupported && SystemInfo.supportsAsyncGPUReadback;
         }
 
+#if !UNITY_2019_3_OR_NEWER
+        static Dictionary<GraphicsFormat, int> _blockSizeMap;
+
+        [RuntimeInitializeOnLoadMethod]
+        static void SetupAlternateGetBlockSize()
+        {
+            _blockSizeMap = new Dictionary<GraphicsFormat, int>();
+            foreach (GraphicsFormat format in Enum.GetValues(typeof(GraphicsFormat)))
+                _blockSizeMap[format] = (int)GraphicsFormatUtility.GetBlockSize(format);
+        }
+#endif
+
+        /// <summary>
+        /// Get the size of a pixel in bytes for a given format.
+        /// </summary>
+        /// <param name="format">Graphics format you are using.</param>
+        /// <returns>Returns the size of the pixel in bytes.</returns>
+        public static int GetBlockSize(GraphicsFormat format)
+        {
+#if UNITY_2019_3_OR_NEWER
+            return (int)GraphicsFormatUtility.GetBlockSize(format);
+#else
+            if (!_blockSizeMap.ContainsKey(format))
+                throw new NotSupportedException("BlockSizeMap doesn't contain key for format");
+            return _blockSizeMap[format];
+#endif
+        }
+
         /// <summary>
         /// Perform the readback from the provided Render texture using ReadPixels API.
         /// </summary>
@@ -59,7 +87,7 @@ namespace Unity.Simulation
         public static byte[] GetPixelsSlow(RenderTexture renderTexture)
         {
             var graphicsFormat = GraphicsFormatUtility.GetGraphicsFormat(renderTexture.format, false);
-            var pixelSize = GraphicsFormatUtility.GetBlockSize(graphicsFormat);
+            var pixelSize = GraphicsUtilities.GetBlockSize(graphicsFormat);
             var channels = GraphicsFormatUtility.GetComponentCount(graphicsFormat);
             var channelSize = pixelSize / channels;
             var rect = new Rect(0, 0, renderTexture.width, renderTexture.height);

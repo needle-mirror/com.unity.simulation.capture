@@ -11,11 +11,36 @@ using Unity.Simulation;
 
 using UnityEngine.TestTools;
 using NUnit.Framework;
+#if ENABLE_CLOUDTESTS
+using Unity.Simulation.Tools;
+#endif
 
 public class CaptureTests
 {
     readonly Color32 kTestColor = Color.blue;
 
+
+
+    [SetUp]
+    public void Reset()
+    {
+        var dir = Application.persistentDataPath;
+        if (Directory.Exists(dir))
+        {
+            var dirInfo = new DirectoryInfo(dir);
+            foreach (var directory in dirInfo.GetDirectories())
+            {
+                directory.Delete(true);
+            }
+
+            foreach (var file in dirInfo.GetFiles())
+            {
+                file.Delete();
+            }
+        }
+    }
+    
+    
     [UnityTest]
     public IEnumerator CaptureTest_ComputeBuffer()
     {
@@ -63,6 +88,9 @@ public class CaptureTests
         output.Dispose();
     }
 
+#if ENABLE_CLOUDTESTS
+    [CloudTest]
+#endif
     [UnityTest]
     public IEnumerator CaptureTest_RenderTexture()
     {
@@ -101,6 +129,7 @@ public class CaptureTests
     }
 
 
+    
     [UnityTest]
     public IEnumerator CaptureTest_CaptureColorAsColor32_AndDepthAs16bitShort()
     {
@@ -194,6 +223,9 @@ public class CaptureTests
         Debug.Assert(count == 0, "depth buffers differ by " + count);
     }
 
+#if ENABLE_CLOUDTESTS
+    [CloudTest]
+#endif
     [UnityTest]
     public IEnumerator CaptureTest_CaptureColorAndDepth32_FastAndSlow_CheckConsistency()
     {
@@ -309,6 +341,9 @@ public class CaptureTests
         validator.Invoke(request);
     }
 
+#if ENABLE_CLOUDTESTS
+    [CloudTest]
+#endif
     [UnityTest]
     public IEnumerator CaptureTest_CaptureColorUsingNonAsyncMethod()
     {
@@ -340,7 +375,8 @@ public class CaptureTests
             return AsyncRequest<object>.Result.Completed;
         };
 
-        request.Start(functor, AsyncRequest<object>.ExecutionContext.EndOfFrame);
+        request.Enqueue(functor);
+        request.Execute(AsyncRequest.ExecutionContext.EndOfFrame);
 
         while (!request.completed)
             yield return null;
@@ -348,6 +384,9 @@ public class CaptureTests
         Debug.Assert(request.error == false, "Request had an error");
     }
 
+#if ENABLE_CLOUDTESTS
+    [CloudTest]
+#endif
     [UnityTest]
     public IEnumerator CaptureTest_CaptureDepth32ToFile()
     {
@@ -363,6 +402,9 @@ public class CaptureTests
         Debug.Assert(request.error == false, "Capture request had an error");
     }
 
+#if ENABLE_CLOUDTESTS
+    [CloudTest]
+#endif
     [UnityTest]
     public IEnumerator CaptureTest_CaptureDepth16ToFile()
     {
@@ -435,6 +477,7 @@ public class CaptureTests
         return Math.Abs(a.r - b.r) < 1e-6f && Math.Abs(a.g - b.g) < 1e-6f && Math.Abs(a.b - b.b) < 1e-6f;
     }
 
+#if UNITY_2019_3_OR_NEWER
     IEnumerator CaptureColorAndEnsureUpright(bool fastPath)
     {
         var camera = SetupCameraWithRenderTexture(2, 2, GraphicsFormat.R8G8B8A8_UNorm);
@@ -473,15 +516,22 @@ public class CaptureTests
         Assert.True(CompareColors(texture.GetPixel(1, 1), Color.red));
     }
 
+#if ENABLE_CLOUDTESTS
+    [CloudTest]
+#endif
     [UnityTest]
     public IEnumerator CaptureTest_1stCaptureColorAndEnsureUpright_FastPath()
     {
         yield return CaptureColorAndEnsureUpright(true);
     }
 
+#if ENABLE_CLOUDTESTS
+    [CloudTest]
+#endif
     [UnityTest]
     public IEnumerator CaptureTest_1stCaptureColorAndEnsureUpright_SlowPath()
     {
         yield return CaptureColorAndEnsureUpright(false);
     }
+#endif // UNITY_2019_3_OR_NEWER
 }

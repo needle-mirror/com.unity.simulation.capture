@@ -1,8 +1,12 @@
 using System.Collections.Generic;
 using System.IO;
-
+using Unity.Simulation;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
+using UnityEngine.UI;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 
 namespace Unity.Simulation
 {
@@ -21,10 +25,22 @@ namespace Unity.Simulation
         private float              _elapsedTime;
         private string             _baseDirectory;
         private int                _sequence = 0;
+        
+        [HideInInspector]
+        public bool                _batchReadback;
 
+        [HideInInspector]
+        public int                 _batchSize = 100;
         void Start()
         {
             _baseDirectory = Manager.Instance.GetDirectoryFor(DataCapturePaths.ScreenCapture, _customFilePath);
+#if UNITY_2019_3_OR_NEWER
+            if (_batchReadback)
+            {
+                CaptureOptions.useBatchReadback = _batchReadback;
+                BatchReadback.Instance().BatchSize = _batchSize;
+            }
+#endif
         }
 
         void Update()
@@ -82,3 +98,24 @@ namespace Unity.Simulation
         }
     }
 }
+
+#if UNITY_2019_3_OR_NEWER
+#if UNITY_EDITOR
+[CustomEditor(typeof(CameraGrab))]
+public class CameraGrab_Editor : Editor
+{
+    public override void OnInspectorGUI()
+    {
+        base.OnInspectorGUI();
+
+        CameraGrab script = (CameraGrab)target;
+        
+        script._batchReadback = EditorGUILayout.Toggle("Batch Readback", script._batchReadback);
+        if (script._batchReadback)
+        {
+            script._batchSize = EditorGUILayout.IntField("Batch Size", script._batchSize);
+        }
+    }
+}
+#endif
+#endif // UNITY_2019_3_OR_NEWER

@@ -1,2 +1,2 @@
-# com.unity.ai.simulation
-Unity Simulation SDK to perform Data Capture.
+# com.unity.simulation.capture
+Unity Simulation Capture SDK to perform Data Capture.

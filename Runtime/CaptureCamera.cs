@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using Unity.AI.Simulation;
+
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Experimental.Rendering;
@@ -109,6 +109,7 @@ namespace Unity.Simulation
             }
         }
 
+#if UNITY_2019_3_OR_NEWER
         /// <summary>
         /// Support for Scriptable Render Pipeline.
         /// SRP works a little differently, this abstraction allows for custom capture options when using SRP.
@@ -116,6 +117,7 @@ namespace Unity.Simulation
         /// You can provide your own implementation of QueueCameraRequest, and dispatch that when appropriate.
         /// </summary>
         public static SRPSupport SRPSupport;
+#endif // UNITY_2019_3_OR_NEWER
 
         static Material _depthCopyMaterial;
 
@@ -225,7 +227,7 @@ namespace Unity.Simulation
                 {
                     colorPath = CaptureImageEncoder.EnforceFileExtension(colorPath, colorImageFormat);
                     var result = FileProducer.Write(colorPath, CaptureImageEncoder.EncodeArray(r.data.colorBuffer as Array, width, height, colorFormat, colorImageFormat));
-                    return result ? AsyncRequest<CaptureState>.Result.Completed : AsyncRequest<CaptureState>.Result.Error;
+                    return result ? AsyncRequest.Result.Completed : AsyncRequest.Result.Error;
                 };
             }
 
@@ -293,8 +295,10 @@ namespace Unity.Simulation
             SetupCaptureRequest(req, Channel.Color,  camera, CameraEvent.AfterEverything,    BuiltinRenderTextureType.CameraTarget,  colorFormat,  colorFunctor,         flipY);
             SetupCaptureRequest(req, Channel.Depth,  camera, CameraEvent.AfterDepthTexture,  BuiltinRenderTextureType.Depth,         depthFormat,  depthFunctor,         flipY);
             SetupCaptureRequest(req, Channel.Motion, camera, CameraEvent.BeforeImageEffects, BuiltinRenderTextureType.MotionVectors, motionFormat, motionVectorsFunctor, flipY);
-            
+
+#if UNITY_2019_3_OR_NEWER
             SRPSupport?.QueueCameraRequest(camera, req);
+#endif
 
             return req;
         }
@@ -342,39 +346,49 @@ namespace Unity.Simulation
                     depthMaterial = _depthCopyMaterial;
                 }
 
+#if UNITY_2019_3_OR_NEWER
                 if (SRPSupport != null && SRPSupport.UsingCustomRenderPipeline())
                 {
-                    req.data.SetFunctor(channel, (AsyncRequest<CaptureState> r) =>
+                    var target = SetupRenderTargets(ref target1, ref target2, camera, null, format, cameraTargetTexture, depthMaterial, flipY);
+                    if (CaptureOptions.useBatchReadback)
                     {
-                        var target = SetupRenderTargets(ref target1, ref target2, camera, null, format, cameraTargetTexture, depthMaterial, flipY);
-
-                        if (GraphicsUtilities.SupportsAsyncReadback())
+                        QueueForAsyncBatchReadback(req, channel, functor, target);
+                    }
+                    else
+                    {
+                        req.data.SetFunctor(channel, (AsyncRequest<CaptureState> r) =>
                         {
-                            AsyncGPUReadback.Request(target, 0, (AsyncGPUReadbackRequest request) =>
+                            if (GraphicsUtilities.SupportsAsyncReadback())
                             {
-                                ReleaseTargets();
-                                if (request.hasError)
-                                    req.error = true;
-                                else
+                                AsyncGPUReadback.Request(target, 0, (AsyncGPUReadbackRequest request) =>
                                 {
-                                    if (functor != null)
+                                    ReleaseTargets();
+                                    if (request.hasError)
+                                        req.error = true;
+                                    else
                                     {
-                                        req.data.SetBuffer(channel, request.GetData<byte>().ToArray());
-                                        req.Start(functor);
+                                        if (functor != null)
+                                        {
+                                            req.data.SetBuffer(channel, request.GetData<byte>().ToArray());
+                                            req.Enqueue(functor);
+                                            req.Execute();
+                                        }
                                     }
-                                }
-                            });
-                        }
-                        else
-                        {
-                            r.data.SetBuffer(channel, GraphicsUtilities.GetPixelsSlow(target));
-                            ReleaseTargets();
-                            req.Start(functor);
-                        }
-                        return AsyncRequest.Result.None;
-                    });
+                                });
+                            }
+                            else
+                            {
+                                r.data.SetBuffer(channel, GraphicsUtilities.GetPixelsSlow(target));
+                                ReleaseTargets();
+                                req.Enqueue(functor);
+                                req.Execute();
+                            }
+                            return AsyncRequest.Result.None;
+                        });
+                    }
                 }
                 else
+#endif // UNITY_2019_3_OR_NEWER
                 {
                     req.data.SetFunctor(channel, functor);
 
@@ -385,35 +399,94 @@ namespace Unity.Simulation
 
                     if (GraphicsUtilities.SupportsAsyncReadback())
                     {
-                        commandBuffer.RequestAsyncReadback(target, (AsyncGPUReadbackRequest request) =>
+                        if (CaptureOptions.useBatchReadback)
                         {
-                            commandBuffer.Clear();
+                            QueueForAsyncBatchReadback(req, channel, functor, target);
                             ReleaseTargets();
-                            if (request.hasError)
-                                req.error = true;
-                            else
+                        }
+                        else
+                        {
+                            commandBuffer.RequestAsyncReadback(target, (AsyncGPUReadbackRequest request) =>
                             {
-                                functor = req.data.SetFunctor(channel, null);
-                                if (functor != null)
+                                commandBuffer.Clear();
+                                ReleaseTargets();
+                                if (request.hasError)
+                                    req.error = true;
+                                else
                                 {
-                                    req.data.SetBuffer(channel, request.GetData<byte>().ToArray());
-                                    req.Start(functor);
+                                    functor = req.data.SetFunctor(channel, null);
+                                    if (functor != null)
+                                    {
+                                        req.data.SetBuffer(channel, request.GetData<byte>().ToArray());
+                                        req.Enqueue(functor);
+                                        req.Execute();
+                                    }
                                 }
-                            }
-                        });
+                            });
+                        }
                     }
                     else
                     {
-                        Func<AsyncRequest<CaptureState>, AsyncRequest<CaptureState>.Result> wrapper = (AsyncRequest<CaptureState> r) =>
+                        Func<AsyncRequest<CaptureState>, AsyncRequest<CaptureState>.Result> wrapper;
+#if UNITY_2019_3_OR_NEWER
+                        if (CaptureOptions.useBatchReadback)
                         {
-                            r.data.SetBuffer(channel, GraphicsUtilities.GetPixelsSlow(target));
-                            ReleaseTargets();
-                            return functor(r);
-                        };
-                        req.Start(wrapper, AsyncRequest.ExecutionContext.EndOfFrame);
+                            wrapper = (AsyncRequest<CaptureState> r) =>
+                            {
+                                BatchReadback.Instance().QueueReadback(target, data =>
+                                {
+                                    r.data.SetBuffer(channel, data);
+                                    ReleaseTargets();
+                                    r.Enqueue(functor);
+                                    r.Execute();
+                                    return AsyncRequest.Result.Completed;
+                                });
+                                return AsyncRequest.Result.Completed;
+                            };
+                        }
+                        else
+#endif // UNITY_2019_3_OR_NEWER
+                        {
+                            wrapper = (AsyncRequest<CaptureState> r) =>
+                            {
+                                r.data.SetBuffer(channel, GraphicsUtilities.GetPixelsSlow(target));
+                                ReleaseTargets();
+                                r.Enqueue(functor);
+                                r.Execute();
+                                return AsyncRequest.Result.Completed;
+                            };
+                        }
+                        req.Enqueue(wrapper);
+                        req.Execute(AsyncRequest.ExecutionContext.EndOfFrame);
                     }
                 }
             }
+        }
+
+        private static void QueueForAsyncBatchReadback(AsyncRequest<CaptureState> req, 
+            Channel channel, 
+            Func<AsyncRequest<CaptureState>, AsyncRequest.Result> functor, 
+            RenderTexture target)
+        {
+            Func<AsyncRequest<CaptureState>, AsyncRequest<CaptureState>.Result> wrapper;
+            wrapper = (AsyncRequest<CaptureState> r) =>
+            {
+                BatchReadback.Instance().QueueReadback(target, bytes =>
+                {
+                    if (functor != null)
+                    {
+                        r.data.SetBuffer(channel, bytes);
+                        r.Enqueue(functor);
+                        r.Execute();
+                    }
+
+                    return AsyncRequest.Result.Completed;
+                });
+                return AsyncRequest.Result.Completed;
+            };
+            
+            req.Enqueue(wrapper);
+            req.Execute(AsyncRequest.ExecutionContext.EndOfFrame);
         }
 
         static RenderTexture SetupRenderTargets
@@ -428,10 +501,10 @@ namespace Unity.Simulation
             bool flipY
         )
         {
-            if (cameraTargetTexture == null)
+            if (cameraTargetTexture == null || depthMaterial != null)
             {
                 target1 = RenderTexture.GetTemporary(camera.pixelWidth, camera.pixelHeight, 0, GraphicsFormatUtility.GetRenderTextureFormat(format));
-                Blit(commandBuffer, null, target1, depthMaterial);
+                Blit(commandBuffer, cameraTargetTexture, target1, depthMaterial);
             }
             else
             {

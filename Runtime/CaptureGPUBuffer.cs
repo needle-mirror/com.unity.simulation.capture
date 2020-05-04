@@ -26,8 +26,9 @@ namespace Unity.Simulation
                     req.error = request.hasError;
                     if (!request.hasError)
                     {
-                        req.data = request.GetData<T>().ToArray(); 
-                        req.Start(functor);
+                        req.data = request.GetData<T>().ToArray();
+                        req.Enqueue(functor);
+                        req.Execute();
                     }
                 });
             }
@@ -37,7 +38,8 @@ namespace Unity.Simulation
                 src.GetData(dst, 0, 0, src.count);
                 
                 req.data = dst;
-                req.Start(functor);
+                req.Enqueue(functor);
+                req.Execute();
             }
 
             return req;
@@ -64,7 +66,8 @@ namespace Unity.Simulation
                     if (!request.hasError)
                     {
                         req.data = request.GetData<T>().ToArray(); 
-                        req.Start(functor);
+                        req.Enqueue(functor);
+                        req.Execute();
                     }
                 });
             }
@@ -74,7 +77,8 @@ namespace Unity.Simulation
                 src.GetData(dst, offset, offset, size);
                 
                 req.data = dst;
-                req.Start(functor);
+                req.Enqueue(functor);
+                req.Execute();
             }
 
             return req;
@@ -100,14 +104,16 @@ namespace Unity.Simulation
                     if (!request.hasError)
                     {
                         req.data = request.GetData<T>().ToArray(); 
-                        req.Start(functor);
+                        req.Enqueue(functor);
+                        req.Execute();
                     }
                 });
             }
             else
             {
                 req.data = GraphicsUtilities.GetPixelsSlow(src as RenderTexture);
-                req.Start(functor);
+                req.Enqueue(functor);
+                req.Execute();
             }
 
             return req;
@@ -134,14 +140,16 @@ namespace Unity.Simulation
                     if (!request.hasError)
                     {
                         req.data = request.GetData<T>().ToArray(); 
-                        req.Start(functor);
+                        req.Enqueue(functor);
+                        req.Execute();
                     }
                 });
             }
             else
             {
                 req.data = GraphicsUtilities.GetPixelsSlow(src as RenderTexture);
-                req.Start(functor);
+                req.Enqueue(functor);
+                req.Execute();
             }
 
             return req;
@@ -173,14 +181,16 @@ namespace Unity.Simulation
                     if (!request.hasError)
                     {
                         req.data = request.GetData<T>().ToArray(); 
-                        req.Start(functor);
+                        req.Enqueue(functor);
+                        req.Execute();
                     }
                 });
             }
             else
             {
                 req.data = GraphicsUtilities.GetPixelsSlow(src as RenderTexture);
-                req.Start(functor);
+                req.Enqueue(functor);
+                req.Execute();
             }
 
             return req;

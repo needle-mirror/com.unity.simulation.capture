@@ -25,7 +25,7 @@ public class ImageFormatTests
         for (var i = 0; i < kLength; ++i)
             data[i] = color;
 
-        var encoded = JpegEncoder.Encode(ArrayUtilities.Cast<byte>(data), kDimension, kDimension, GraphicsUtilities.GetBlockSize(GraphicsFormat.R8G8B8A8_UNorm), GraphicsFormat.R8G8B8A8_UNorm);
+        var encoded = JpegEncoder.Encode(ArrayUtilities.Cast<byte>(data), kDimension, kDimension, (int)GraphicsFormatUtility.GetBlockSize(GraphicsFormat.R8G8B8A8_UNorm), GraphicsFormat.R8G8B8A8_UNorm);
 
         int width = 0, height = 0;
         var decoded = ArrayUtilities.Cast<Color32>(JpegEncoder.Decode(encoded, ref width, ref height));

@@ -14,13 +14,10 @@ namespace Unity.Simulation
         float              _elapsedTime;
         string             _baseDirectory;
         int                _sequence = 0;
-        Camera             _camera;
+        public Camera             _camera;
 
         void Start()
         {
-            _camera = GetComponent<Camera>();
-            if (_camera == null)
-                enabled = false;
             _baseDirectory = Manager.Instance.GetDirectoryFor(DataCapturePaths.ScreenCapture);
         }
 

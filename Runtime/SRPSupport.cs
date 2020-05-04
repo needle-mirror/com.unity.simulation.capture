@@ -6,9 +6,7 @@ using UnityEngine.Rendering;
 
 #if UNITY_2019_3_OR_NEWER
 
-using Unity.AI.Simulation;
-
-namespace Unity.AI.Simulation
+namespace Unity.Simulation
 {
     /// <summary>
     /// </summary>

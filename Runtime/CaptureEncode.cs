@@ -16,8 +16,10 @@ namespace Unity.Simulation
             Jpg,
             Tga,
             Raw,
+#if UNITY_2019_3_OR_NEWER
             Png,
-            Exr
+            Exr,
+#endif
         }
 
         /// <summary>
@@ -72,18 +74,20 @@ namespace Unity.Simulation
             {
                 case ImageFormat.Raw:
                     return data;
+#if UNITY_2019_3_OR_NEWER
                 case ImageFormat.Png:
                     return ImageConversion.EncodeArrayToPNG(data, format, (uint)width, (uint)height, 0);
                 case ImageFormat.Exr:
                     return ImageConversion.EncodeArrayToEXR(data, format, (uint)width, (uint)height, 0, /*EXRFlags*/(Texture2D.EXRFlags)additionalParam);
+                case ImageFormat.Tga:
+                    return ImageConversion.EncodeArrayToTGA(data, format, (uint)width, (uint)height, 0);
+#endif
                 case ImageFormat.Jpg:
 #if USIM_USE_BUILTIN_JPG_ENCODER
                     return ImageConversion.EncodeArrayToJPG(data, format, (uint)width, (uint)height, 0, /*quality*/additionalParam > 0 ? (int)additionalParam : 75);
 #else
-                    return JpegEncoder.Encode(ArrayUtilities.Cast<byte>(data), width, height, (int)GraphicsFormatUtility.GetBlockSize(format), format, /*quality*/additionalParam > 0 ? (int)additionalParam : 75);
+                    return JpegEncoder.Encode(ArrayUtilities.Cast<byte>(data), width, height, GraphicsUtilities.GetBlockSize(format), format, /*quality*/additionalParam > 0 ? (int)additionalParam : 75);
 #endif
-                case ImageFormat.Tga:
-                    return ImageConversion.EncodeArrayToTGA(data, format, (uint)width, (uint)height, 0);
                 default:
                     throw new NotSupportedException("ImageFormat is not supported");
             }

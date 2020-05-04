@@ -9,6 +9,7 @@ using Unity.Simulation;
 
 using UnityEngine.TestTools;
 using NUnit.Framework;
+using UnityEngine.Experimental.GlobalIllumination;
 
 public class ScreenCaptureBase
 {
@@ -22,6 +23,7 @@ public class ScreenCaptureBase
 
     GameObject _go;
     protected Camera[] _cameras;
+    protected DirectionalLight _directional;
 
     class RotatingCubes : MonoBehaviour
     {
@@ -39,7 +41,7 @@ public class ScreenCaptureBase
         }
     }
 
-    public void SetupTest(int numCubes, int numCameras, DepthTextureMode depthTextureMode = DepthTextureMode.Depth)
+    public virtual void SetupTest(int numCubes, int numCameras, DepthTextureMode depthTextureMode = DepthTextureMode.Depth, bool enableCamera = false)
     {
         Application.targetFrameRate = 10000;
         QualitySettings.vSyncCount = 0;
@@ -59,7 +61,14 @@ public class ScreenCaptureBase
             camera.renderingPath = RenderingPath.Forward;
             camera.nearClipPlane = 8;
             _cameras[i] = camera;
+            if (i == 0)
+            {
+                _cameras[i].enabled = enableCamera;
+                _cameras[i].tag = "MainCamera";
+            }
         }
+        
+        _directional = new DirectionalLight();
 
         var script = _go.AddComponent<RotatingCubes>();
         script.Setup(numCubes);

@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.0.10-preview.7] - 2020-05-04
+
+- Support for Batch readback for both synchronous and asynchronous readback paths. Improves image readback performance by ~20% on player build with GPU support and by ~5-10% on CPU based build. **
+- End to end test coverage on usim
+- Use NativeArray to pass for encoding (2020.1 and above)
+- Support for 2018.4 restored.
+
+(** : Subject to batch size, image resolution and time taken to render the frame i.e if render time is a bottleneck or the readback time)
+
 ## [0.0.10-preview.6] - 2020-03-20
 
 Fix uses of deprecated image encoding API.
