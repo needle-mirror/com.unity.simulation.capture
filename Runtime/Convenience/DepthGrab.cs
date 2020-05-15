@@ -11,14 +11,16 @@ namespace Unity.Simulation
         public float               _screenCaptureInterval = 1.0f;
         public GraphicsFormat      _format = GraphicsFormat.R16_UNorm;
 
-        float              _elapsedTime;
-        string             _baseDirectory;
-        int                _sequence = 0;
-        public Camera             _camera;
+        float                      _elapsedTime;
+        string                     _baseDirectory;
+        int                        _sequence = 0;
+        public Camera              _camera;
 
         void Start()
         {
             _baseDirectory = Manager.Instance.GetDirectoryFor(DataCapturePaths.ScreenCapture);
+            if (_camera != null && _camera.depthTextureMode == DepthTextureMode.None)
+                _camera.depthTextureMode = DepthTextureMode.Depth;
         }
 
         void Update()
@@ -46,6 +48,13 @@ namespace Unity.Simulation
 
                 ++_sequence;
             }
+        }
+
+        void OnValidate()
+        {
+            // Automatically add the camera component if there is one on this game object.
+            if (_camera == null)
+                _camera = GetComponent<Camera>();
         }
     }
 }

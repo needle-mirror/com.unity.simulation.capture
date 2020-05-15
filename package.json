@@ -1,19 +1,19 @@
 {
   "name": "com.unity.simulation.capture",
   "displayName": "Unity Simulation Capture",
-  "version": "0.0.10-preview.7",
+  "version": "0.0.10-preview.8",
   "unity": "2018.4",
   "description": "Simulation SDK. Contains functionality to capture screen shots and data logs from the simulation, and persist it to the file system or the cloud.",
   "dependencies": {
     "com.unity.simulation.core": "0.0.10-preview.12"
   },
   "upmCi": {
-    "footprint": "9361bbbdd1193e5bc35c01ed2b84075ecc2d5786"
+    "footprint": "c10b60a50a9739fd0efb212087cb38469f36a72c"
   },
   "repository": {
     "type": "git",
     "url": "https://github.cds.internal.unity3d.com/unity/com.unity.simulation.capture.git",
-    "revision": "cd74e0d31f1524bd5a24ead5f9cf86cb5723103b"
+    "revision": "82620c69011f71ba3775839d7202e466ab0b28ce"
   },
   "samples": [
     {

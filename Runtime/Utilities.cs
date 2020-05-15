@@ -52,13 +52,17 @@ namespace Unity.Simulation
 
 #if !UNITY_2019_3_OR_NEWER
         static Dictionary<GraphicsFormat, int> _blockSizeMap;
+        static Dictionary<GraphicsFormat, int> _componentCountMap;
 
         [RuntimeInitializeOnLoadMethod]
         static void SetupAlternateGetBlockSize()
         {
             _blockSizeMap = new Dictionary<GraphicsFormat, int>();
             foreach (GraphicsFormat format in Enum.GetValues(typeof(GraphicsFormat)))
+            {
                 _blockSizeMap[format] = (int)GraphicsFormatUtility.GetBlockSize(format);
+                _componentCountMap[format] = (int)GraphicsFormatUtility.GetComponentCount(format);
+            }
         }
 #endif
 
@@ -75,6 +79,22 @@ namespace Unity.Simulation
             if (!_blockSizeMap.ContainsKey(format))
                 throw new NotSupportedException("BlockSizeMap doesn't contain key for format");
             return _blockSizeMap[format];
+#endif
+        }
+
+        /// <summary>
+        /// Get the number of components for a given format.
+        /// </summary>
+        /// <param name="format">Graphics format you are using.</param>
+        /// <returns>Returns the number of components.</returns>
+        public static int GetComponentCount(GraphicsFormat format)
+        {
+#if UNITY_2019_3_OR_NEWER
+            return (int)GraphicsFormatUtility.GetComponentCount(format);
+#else
+            if (!_componentCountMap.ContainsKey(format))
+                throw new NotSupportedException("ComponentCountMap doesn't contain key for format");
+            return _componentCountMap[format];
 #endif
         }
 

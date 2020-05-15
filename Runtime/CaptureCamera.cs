@@ -119,7 +119,21 @@ namespace Unity.Simulation
         public static SRPSupport SRPSupport;
 #endif // UNITY_2019_3_OR_NEWER
 
-        static Material _depthCopyMaterial;
+        /// <summary>
+        /// Property for determining whether or not a scriptable render pipeline is enabled or not.
+        /// Will only ever return true on Unity versions 2019.3 or later.
+        /// </summary>
+        public static bool scriptableRenderPipeline
+        {
+            get
+            {
+#if UNITY_2019_3_OR_NEWER
+                return SRPSupport != null && SRPSupport.UsingCustomRenderPipeline();
+#else
+                return false;
+#endif
+            }
+        }
 
         static Dictionary<Camera, Dictionary<CameraEvent, CommandBuffer>> _buffers = new Dictionary<Camera, Dictionary<CameraEvent, CommandBuffer>>();
 
@@ -219,8 +233,8 @@ namespace Unity.Simulation
             var width  = camera.pixelWidth;
             var height = camera.pixelHeight;
 
-            bool flipY = camera.targetTexture == null;
-            
+            bool flipY = camera.targetTexture == null && !scriptableRenderPipeline;
+
             if (colorPath != null)
             {
                 colorFunctor = (AsyncRequest<CaptureState> r) =>
@@ -339,15 +353,10 @@ namespace Unity.Simulation
 
                 Material depthMaterial = null;
                 if (source == BuiltinRenderTextureType.Depth)
-                {
-                    // Lazily initialize _depthCopyMaterial. This could be done somewhere else.
-                    if (_depthCopyMaterial == null)
-                        _depthCopyMaterial = new Material(Shader.Find("usim/BlitCopyDepth")); 
-                    depthMaterial = _depthCopyMaterial;
-                }
+                    depthMaterial = SelectDepthShaderVariant(format);
 
 #if UNITY_2019_3_OR_NEWER
-                if (SRPSupport != null && SRPSupport.UsingCustomRenderPipeline())
+                if (scriptableRenderPipeline)
                 {
                     var target = SetupRenderTargets(ref target1, ref target2, camera, null, format, cameraTargetTexture, depthMaterial, flipY);
                     if (CaptureOptions.useBatchReadback)
@@ -463,9 +472,9 @@ namespace Unity.Simulation
             }
         }
 
-        private static void QueueForAsyncBatchReadback(AsyncRequest<CaptureState> req, 
-            Channel channel, 
-            Func<AsyncRequest<CaptureState>, AsyncRequest.Result> functor, 
+        static void QueueForAsyncBatchReadback(AsyncRequest<CaptureState> req,
+            Channel channel,
+            Func<AsyncRequest<CaptureState>, AsyncRequest.Result> functor,
             RenderTexture target)
         {
             Func<AsyncRequest<CaptureState>, AsyncRequest<CaptureState>.Result> wrapper;
@@ -552,5 +561,26 @@ namespace Unity.Simulation
                 Graphics.Blit(texture, renderTexture, scale, offset);
             }
         }
+
+        static Material SelectDepthShaderVariant(GraphicsFormat format)
+        {
+            // Lazily initialize _depthCopyMaterial. This could be done somewhere else.
+            if (_depthCopyMaterials == null)
+            {
+                _depthCopyMaterials = new Material[4];
+                for (var i = 0; i < _depthCopyMaterials.Length; ++i)
+                {
+                    _depthCopyMaterials[i] = new Material(Shader.Find("usim/BlitCopyDepth"));
+                    _depthCopyMaterials[i].EnableKeyword($"CHANNELS{i + 1}");
+                };
+            }
+
+            var componentCount = GraphicsUtilities.GetComponentCount(format);
+            Debug.Assert(componentCount >= 1 && componentCount <= 4);
+
+            return _depthCopyMaterials[componentCount - 1];
+        }
+
+        static Material[] _depthCopyMaterials;
     }
 }

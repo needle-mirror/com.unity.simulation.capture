@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.0.10-preview.8] - 2020-05-15
+
+- Fixed depth support. Depth can now be captured in all formats, but in order to save it to file, 
+  you either need to use a raw format, or one of the supported image formats.
+  This will result in depth being 8 bits for PNG/JPG etc.
+  When consumed at runtime, full precision of R32_SFloat is supported as a capture format.
+  Depth is normalized for the distance between the near and far clipping planes, so scale accordingly.
+
 ## [0.0.10-preview.7] - 2020-05-04
 
 - Support for Batch readback for both synchronous and asynchronous readback paths. Improves image readback performance by ~20% on player build with GPU support and by ~5-10% on CPU based build. **
