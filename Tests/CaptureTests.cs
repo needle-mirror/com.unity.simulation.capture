@@ -391,8 +391,8 @@ public class CaptureTests
     public IEnumerator CaptureTest_CaptureDepth32ToFile()
     {
         var camera = SetupCameraTestWithMaterial(32, GraphicsFormat.R8G8B8A8_UNorm, new Vector3(0, 0, 500.5f), 0.1f, 1000);
-
-        var request = CaptureCamera.CaptureDepthToFile(camera, GraphicsFormat.R32_SFloat, "depth32.tga");
+        var depthPath = Path.Combine(Application.persistentDataPath, "depth32.tga");
+        var request = CaptureCamera.CaptureDepthToFile(camera, GraphicsFormat.R32_SFloat, depthPath);
 
         camera.Render();
 
@@ -409,8 +409,8 @@ public class CaptureTests
     public IEnumerator CaptureTest_CaptureDepth16ToFile()
     {
         var camera = SetupCameraTestWithMaterial(16, GraphicsFormat.R8G8B8A8_UNorm, new Vector3(0, 0, 500.5f), 0.1f, 1000);
-
-        var request = CaptureCamera.CaptureDepthToFile(camera, GraphicsFormat.R16_UNorm, "depth16.tga");
+        var depthPath = Path.Combine(Application.persistentDataPath, "depth16.tga");
+        var request = CaptureCamera.CaptureDepthToFile(camera, GraphicsFormat.R16_UNorm, depthPath);
 
         camera.Render();
 

@@ -39,6 +39,7 @@ namespace Unity.Simulation
     {
         private const string kDefaultFileName  = "log";
         private const string kDefaultExtension = ".txt";
+        private const int    kDefaultMaxElapsedSeconds = 5;
 
         Unity.Simulation.ChunkedStream _producer;
         public int bufferSize { get; set; }
@@ -49,7 +50,7 @@ namespace Unity.Simulation
         /// <param name="logName">Name of the DataCapture Log file.</param>
         /// <param name="bufferSize">This corresponds to the file size (in KB). Default is set to 8192.</param>
         /// <param name="userPath">Location of the log file. Default is set to Application persistent path.</param>
-        public Logger(string logName, int bufferSize = 8192, string userPath = "")
+        public Logger(string logName, int bufferSize = 8192, int maxElapsedSeconds = kDefaultMaxElapsedSeconds, string userPath = "")
         {
             this.bufferSize = bufferSize;
 
@@ -57,7 +58,7 @@ namespace Unity.Simulation
             var ext  = string.IsNullOrEmpty(Path.GetExtension(logName)) ? kDefaultExtension : Path.GetExtension(logName);
             SetOutputPath(DataCapturePaths.Logs, name, ext, userPath);
         
-            _producer = new Unity.Simulation.ChunkedStream(bufferSize:this.bufferSize, functor:(AsyncRequest<object> request) =>
+            _producer = new Unity.Simulation.ChunkedStream(bufferSize:this.bufferSize, maxElapsedSeconds: maxElapsedSeconds, functor:(AsyncRequest<object> request) =>
             {
                 Unity.Simulation.FileProducer.Write(GetPath(), request.data as Array);
                 return AsyncRequest.Result.Completed;
@@ -77,9 +78,9 @@ namespace Unity.Simulation
         /// Flush data in the buffer to the file system right away.
         /// Usually it waits till the size of the buffer reaches to the bufferSize set.
         /// </summary>
-        public void Flushall()
+        public void Flushall(bool synchronous = false)
         {
-            _producer.Flush();
+            _producer.Flush(synchronous);
         }
     }
 

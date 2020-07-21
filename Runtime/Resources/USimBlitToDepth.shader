@@ -14,7 +14,7 @@
             #pragma fragment frag
             #include "UnityCG.cginc"
  
-            uniform sampler2D _CameraDepthTexture;
+            UNITY_DECLARE_DEPTH_TEXTURE(_CameraDepthTexture);
             float4 _CameraDepthTexture_ST;
 
             struct v2f
@@ -34,7 +34,7 @@
 #if CHANNELS1
             float frag(v2f i) : COLOR
             {
-                float d = tex2D(_CameraDepthTexture, i.uv);
+                float d = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, i.uv);
                 d = Linear01Depth(d);
                 return d;
             }
@@ -42,7 +42,7 @@
 #if CHANNELS2
             float2 frag(v2f i) : COLOR
             {
-                float d = tex2D(_CameraDepthTexture, i.uv);
+                float d = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, i.uv);
                 d = Linear01Depth(d);
                 return float2(d, d);
             }
@@ -50,7 +50,7 @@
 #if CHANNELS3
             float3 frag(v2f i) : COLOR
             {
-                float d = tex2D(_CameraDepthTexture, i.uv);
+                float d = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, i.uv);
                 d = Linear01Depth(d);
                 return float3(d, d, d);
             }
@@ -58,7 +58,7 @@
 #if CHANNELS4
             float4 frag(v2f i) : COLOR
             {
-                float d = tex2D(_CameraDepthTexture, i.uv);
+                float d = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, i.uv);
                 d = Linear01Depth(d);
                 return float4(d, d, d, 1);
             }

@@ -140,8 +140,8 @@ public class JpegEncoder
     }
 
 #if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN
-    [DllImport("turbojpeg")]
-#elif UNITY_EDITOR_LINUX || UNITY_STANDALONE_LINUX
+    [DllImport("libturbojpeg")]
+#elif UNITY_EDITOR_LINUX || UNITY_STANDALONE_LINUX || PLATFORM_CLOUD_RENDERING
     [DllImport("libturbojpeg.so")]
 #elif UNITY_EDITOR_OSX || UNITY_STANDALONE_OSX
     [DllImport("libturbojpeg")]
@@ -151,8 +151,8 @@ public class JpegEncoder
     private static extern IntPtr tjInitCompress();
 
 #if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN
-    [DllImport("turbojpeg")]
-#elif UNITY_EDITOR_LINUX || UNITY_STANDALONE_LINUX
+    [DllImport("libturbojpeg")]
+#elif UNITY_EDITOR_LINUX || UNITY_STANDALONE_LINUX || PLATFORM_CLOUD_RENDERING
     [DllImport("libturbojpeg.so")]
 #elif UNITY_EDITOR_OSX || UNITY_STANDALONE_OSX
     [DllImport("libturbojpeg")]
@@ -162,8 +162,8 @@ public class JpegEncoder
     private static extern IntPtr tjInitDecompress();
 
 #if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN
-    [DllImport("turbojpeg")]
-#elif UNITY_EDITOR_LINUX || UNITY_STANDALONE_LINUX
+    [DllImport("libturbojpeg")]
+#elif UNITY_EDITOR_LINUX || UNITY_STANDALONE_LINUX || PLATFORM_CLOUD_RENDERING
     [DllImport("libturbojpeg.so")]
 #elif UNITY_EDITOR_OSX || UNITY_STANDALONE_OSX
     [DllImport("libturbojpeg")]
@@ -173,8 +173,8 @@ public class JpegEncoder
     private static extern int tjCompress(IntPtr handle, byte[] srcBuf, int width, int pitch, int height, int pixelSize, byte[] dstBuf, ref int compressedSize, int jpegSubsamp, int jpegQual, int flags);
 
 #if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN
-    [DllImport("turbojpeg")]
-#elif UNITY_EDITOR_LINUX || UNITY_STANDALONE_LINUX
+    [DllImport("libturbojpeg")]
+#elif UNITY_EDITOR_LINUX || UNITY_STANDALONE_LINUX || PLATFORM_CLOUD_RENDERING
     [DllImport("libturbojpeg.so")]
 #elif UNITY_EDITOR_OSX || UNITY_STANDALONE_OSX
     [DllImport("libturbojpeg")]
@@ -184,8 +184,8 @@ public class JpegEncoder
     private static extern int tjCompress2(IntPtr handle, byte[] srcBuf, int width, int pitch, int height, int pixelFormat, byte[] dstBuf, ref int compressedSize, int jpegSubsamp, int jpegQual, int flags);
 
 #if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN
-    [DllImport("turbojpeg")]
-#elif UNITY_EDITOR_LINUX || UNITY_STANDALONE_LINUX
+    [DllImport("libturbojpeg")]
+#elif UNITY_EDITOR_LINUX || UNITY_STANDALONE_LINUX || PLATFORM_CLOUD_RENDERING
     [DllImport("libturbojpeg.so")]
 #elif UNITY_EDITOR_OSX || UNITY_STANDALONE_OSX
     [DllImport("libturbojpeg")]
@@ -195,8 +195,8 @@ public class JpegEncoder
     private static extern int tjDecompressHeader3(IntPtr handle, byte[] jpegBuf, int jpegSize, ref int width, ref int height, ref int jpegSubsamp, ref int jpegColorspace);
 
 #if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN
-    [DllImport("turbojpeg")]
-#elif UNITY_EDITOR_LINUX || UNITY_STANDALONE_LINUX
+    [DllImport("libturbojpeg")]
+#elif UNITY_EDITOR_LINUX || UNITY_STANDALONE_LINUX || PLATFORM_CLOUD_RENDERING
     [DllImport("libturbojpeg.so")]
 #elif UNITY_EDITOR_OSX || UNITY_STANDALONE_OSX
     [DllImport("libturbojpeg")]
@@ -206,8 +206,8 @@ public class JpegEncoder
     private static extern int tjDecompress2(IntPtr handle, byte[] jpegBuf, int jpegSize, byte[] dstBuf, int width, int pitch, int height, int pixelFormat, int flags);
 
 #if UNITY_EDITOR_WIN || UNITY_STANDALONE_WIN
-    [DllImport("turbojpeg")]
-#elif UNITY_EDITOR_LINUX || UNITY_STANDALONE_LINUX
+    [DllImport("libturbojpeg")]
+#elif UNITY_EDITOR_LINUX || UNITY_STANDALONE_LINUX || PLATFORM_CLOUD_RENDERING
     [DllImport("libturbojpeg.so")]
 #elif UNITY_EDITOR_OSX || UNITY_STANDALONE_OSX
     [DllImport("libturbojpeg")]

@@ -115,7 +115,7 @@ namespace Unity.Simulation
             // for RGB(A) we can just return the raw data.
             if (channels >= 3 && channels <= 4)
             {
-                var texture = new Texture2D(renderTexture.width, renderTexture.height, graphicsFormat, TextureCreationFlags.None);
+                var texture = new Texture2D(renderTexture.width, renderTexture.height);
                 RenderTexture.active = renderTexture;
                 texture.ReadPixels(rect, 0, 0);
                 RenderTexture.active = null;

@@ -31,4 +31,33 @@ public class DataLoggerTests
         var fileInfo = new FileInfo(path);
         Assert.AreEqual(JsonUtility.ToJson(inputLog).Length + 1, fileInfo.Length);
     }
+
+    [UnityTest]
+    public IEnumerator DataLogger_FlushesToFileSystem_WithElapsedTimeSet()
+    {
+        var logger = new Logger("TestLog.txt", maxElapsedSeconds: 5);
+        logger.Log(new TestLog() { msg = "Test 123"});
+        yield return new WaitForSeconds(6);
+        var path = Path.Combine(Configuration.Instance.GetStoragePath(), "Logs", "TestLog_0.txt");
+        Assert.IsTrue(!File.Exists(path));
+    }
+
+    [UnityTest]
+    public IEnumerator DataLogger_FlushesToFileSystemOnlyWithMaxBufferSize()
+    {
+        var logger = new Logger("SimLog", bufferSize: 65536, maxElapsedSeconds:-1);
+        logger.Log(new TestLog() { msg = "Test Simulation Log!"});
+        yield return new WaitForSeconds(5);
+        var path = Path.Combine(Configuration.Instance.GetStoragePath(), "Logs", "SimLog_0.txt");
+        Assert.IsTrue(!File.Exists(path));
+        for (int i = 0; i < 100; i++)
+        {
+            logger.Log(new TestLog(){ msg = "Test Simulation Log"});
+        }
+        logger.Flushall(true);
+        Assert.IsTrue(File.Exists(path));
+
+        var fileContents = File.ReadAllLines(path);
+        Assert.AreEqual(fileContents.Length, 101);
+    }
 }

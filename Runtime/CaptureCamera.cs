@@ -233,7 +233,7 @@ namespace Unity.Simulation
             var width  = camera.pixelWidth;
             var height = camera.pixelHeight;
 
-            bool flipY = camera.targetTexture == null && !scriptableRenderPipeline;
+            bool flipY = camera.targetTexture == null && !scriptableRenderPipeline && GraphicsUtilities.SupportsAsyncReadback();
 
             if (colorPath != null)
             {
@@ -344,8 +344,9 @@ namespace Unity.Simulation
                         RenderTexture.ReleaseTemporary(target1);
                         target1 = null;
                     }
-                    if (target2 != null && target2 != cameraTargetTexture)
+                    if (target2 != null)
                     {
+                        Debug.Assert(target2 != cameraTargetTexture);
                         RenderTexture.ReleaseTemporary(target2);
                         target2 = null;
                     }
@@ -358,15 +359,15 @@ namespace Unity.Simulation
 #if UNITY_2019_3_OR_NEWER
                 if (scriptableRenderPipeline)
                 {
-                    var target = SetupRenderTargets(ref target1, ref target2, camera, null, format, cameraTargetTexture, depthMaterial, flipY);
                     if (CaptureOptions.useBatchReadback)
                     {
-                        QueueForAsyncBatchReadback(req, channel, functor, target);
+                        QueueForAsyncBatchReadback(req, channel, functor, SetupRenderTargets(ref target1, ref target2, camera, null, format, cameraTargetTexture, depthMaterial, flipY));
                     }
                     else
                     {
                         req.data.SetFunctor(channel, (AsyncRequest<CaptureState> r) =>
                         {
+                            var target = SetupRenderTargets(ref target1, ref target2, camera, null, format, cameraTargetTexture, depthMaterial, flipY);
                             if (GraphicsUtilities.SupportsAsyncReadback())
                             {
                                 AsyncGPUReadback.Request(target, 0, (AsyncGPUReadbackRequest request) =>
@@ -418,7 +419,6 @@ namespace Unity.Simulation
                             commandBuffer.RequestAsyncReadback(target, (AsyncGPUReadbackRequest request) =>
                             {
                                 commandBuffer.Clear();
-                                ReleaseTargets();
                                 if (request.hasError)
                                     req.error = true;
                                 else
@@ -431,6 +431,7 @@ namespace Unity.Simulation
                                         req.Execute();
                                     }
                                 }
+                                ReleaseTargets();
                             });
                         }
                     }
@@ -512,7 +513,7 @@ namespace Unity.Simulation
         {
             if (cameraTargetTexture == null || depthMaterial != null)
             {
-                target1 = RenderTexture.GetTemporary(camera.pixelWidth, camera.pixelHeight, 0, GraphicsFormatUtility.GetRenderTextureFormat(format));
+                target1 = RenderTexture.GetTemporary(camera.pixelWidth, camera.pixelHeight, 0);
                 Blit(commandBuffer, cameraTargetTexture, target1, depthMaterial);
             }
             else
@@ -526,39 +527,37 @@ namespace Unity.Simulation
                 Blit(commandBuffer, target1, target2, new Vector2(1, -1), Vector2.up);
             }
 
-            // order is target2 > targetTexture > target1
-            var target = target2 == null ? (cameraTargetTexture == null ? target1 : cameraTargetTexture) : target2;
-
-            return target;
+            // order is target2 > target1 > targetTexture
+            return target2 == null ? (target1 == null ?  cameraTargetTexture : target1) : target2;
         }
 
-        static void Blit(CommandBuffer commandBuffer, Texture texture, RenderTexture renderTexture, Material material)
+        static void Blit(CommandBuffer commandBuffer, RenderTexture src, RenderTexture dst, Material material)
         {
             if (commandBuffer != null)
             {
                 if (material != null)
-                    commandBuffer.Blit(texture, renderTexture, material);
+                    commandBuffer.Blit(src, dst, material);
                 else
-                    commandBuffer.Blit(texture, renderTexture);
+                    commandBuffer.Blit(src, dst);
             }
             else
             {
                 if (material != null)
-                    Graphics.Blit(texture, renderTexture, material);
+                    Graphics.Blit(src, dst, material);
                 else
-                    Graphics.Blit(texture, renderTexture);
+                    Graphics.Blit(src, dst);
             }
         }
 
-        static void Blit(CommandBuffer commandBuffer, Texture texture, RenderTexture renderTexture, Vector2 scale, Vector2 offset)
+        static void Blit(CommandBuffer commandBuffer, RenderTexture src, RenderTexture dst, Vector2 scale, Vector2 offset)
         {
             if (commandBuffer != null)
             {
-                commandBuffer.Blit(texture, renderTexture, scale, offset);
+                commandBuffer.Blit(src, dst, scale, offset);
             }
             else
             {
-                Graphics.Blit(texture, renderTexture, scale, offset);
+                Graphics.Blit(src, dst, scale, offset);
             }
         }
 
@@ -577,7 +576,6 @@ namespace Unity.Simulation
 
             var componentCount = GraphicsUtilities.GetComponentCount(format);
             Debug.Assert(componentCount >= 1 && componentCount <= 4);
-
             return _depthCopyMaterials[componentCount - 1];
         }
 

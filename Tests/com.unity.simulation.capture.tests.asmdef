@@ -6,7 +6,7 @@
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner",
         "Unity.PerformanceTesting",
-        "com.unity.simulation.testrunner"
+        "com.unity.simulation.tools"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

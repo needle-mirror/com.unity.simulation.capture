@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.10-preview.9] - 2020-07-21
+
+- Fixed an issue for one captured frame being off while using AsyncGPUReadback request.
+- Fixed an issue for RGB capture on Metal Gfx API turning out to be all red while running in OSX Player.
+- Fixed an issue for depth capture from a RenderTexture.
+- Exposed maxElapsedTime via Simulation Logger constructor.
+
 ## [0.0.10-preview.8] - 2020-05-15
 
 - Fixed depth support. Depth can now be captured in all formats, but in order to save it to file, 
