@@ -233,7 +233,7 @@ namespace Unity.Simulation
             var width  = camera.pixelWidth;
             var height = camera.pixelHeight;
 
-            bool flipY = camera.targetTexture == null && !scriptableRenderPipeline && GraphicsUtilities.SupportsAsyncReadback();
+            bool flipY = ShouldFlipY(camera);
 
             if (colorPath != null)
             {
@@ -497,6 +497,47 @@ namespace Unity.Simulation
             
             req.Enqueue(wrapper);
             req.Execute(AsyncRequest.ExecutionContext.EndOfFrame);
+        }
+
+
+        /// <summary>
+        /// Check if for the given rendering pipline and GfxAPI there is a need to flip Y during the readback from the backbuffer.
+        /// </summary>
+        /// <param name="camera">Camera from which the readback is being performed.</param>
+        /// <returns>A boolean indicating if the flip is required.</returns>
+        public static bool ShouldFlipY(Camera camera)
+        {
+            if (SRPSupport != null)
+            {
+                switch (SRPSupport.GetCurrentPipelineRenderingType())
+                {
+#if URP_ENABLED
+                    case RenderingPipelineType.URP:
+                    {
+                        return (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Direct3D11 || SystemInfo.graphicsDeviceType == GraphicsDeviceType.Metal) &&
+                            (camera.targetTexture != null || camera.cameraType == CameraType.Game);
+                    }
+#endif
+#if HDRP_ENABLED
+                    case RenderingPipelineType.HDRP:
+                    {
+                        var hdAdditionalCameraData = camera.gameObject.GetComponent<UnityEngine.Rendering.HighDefinition.HDAdditionalCameraData>();
+                        //Based on logic in HDRenderPipeline.PrepareFinalBlitParameters
+                        return camera.targetTexture != null ||
+                                hdAdditionalCameraData.flipYMode == UnityEngine.Rendering.HighDefinition.HDAdditionalCameraData.FlipYMode.ForceFlipY ||
+                                camera.cameraType == CameraType.Game;
+                    }
+#endif
+                    default:
+                    {
+                        return camera.targetTexture == null && GraphicsUtilities.SupportsAsyncReadback();
+                    }
+                }
+            }
+            else
+            {
+                return camera.targetTexture == null && GraphicsUtilities.SupportsAsyncReadback();
+            }
         }
 
         static RenderTexture SetupRenderTargets

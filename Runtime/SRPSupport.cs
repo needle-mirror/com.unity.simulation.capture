@@ -3,11 +3,29 @@ using System.Collections.Generic;
 using Unity.Simulation;
 using UnityEngine;
 using UnityEngine.Rendering;
+#if URP_ENABLED
+using UnityEngine.Rendering.Universal;
+#endif
+
+#if HDRP_ENABLED
+using UnityEngine.Rendering.HighDefinition;
+#endif
 
 #if UNITY_2019_3_OR_NEWER
 
 namespace Unity.Simulation
 {
+
+    /// <summary>
+    /// An enum indicating the type of rendering pipeline being used.
+    /// </summary>
+    public enum RenderingPipelineType
+    {
+        URP,
+        HDRP,
+        BUILTIN
+    }
+
     /// <summary>
     /// </summary>
     /// <param name=""></param>
@@ -58,6 +76,24 @@ namespace Unity.Simulation
         public bool UsingCustomRenderPipeline()
         {
             return GraphicsSettings.currentRenderPipeline != null;
+        }
+
+        /// <summary>
+        /// Get Current Rendering Pipeline type.
+        /// </summary>
+        /// <returns>RenderingPipelineType indicating type of current renering pipeline : (URP/HDRP/Built-in)</returns>
+        public RenderingPipelineType GetCurrentPipelineRenderingType()
+        {
+#if URP_ENABLED
+            if (UsingCustomRenderPipeline() && RenderPipelineManager.currentPipeline is UniversalRenderPipeline)
+                return RenderingPipelineType.URP;
+#endif
+#if HDRP_ENABLED
+            if (UsingCustomRenderPipeline() && RenderPipelineManager.currentPipeline is UnityEngine.Rendering.HighDefinition.HDRenderPipeline)
+                return RenderingPipelineType.HDRP;
+#endif
+
+            return RenderingPipelineType.BUILTIN;
         }
 
         /// <summary>

@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.0.10-preview.10] - 2020-08-03
+- Fixed an issue for images coming out flipped for Metal Graphics API
+- Added a public API ShouldFlipY to check if the image readback from backbuffer needs to be flipped.
+- Updating core dependency to preview.16
+
 ## [0.0.10-preview.9] - 2020-07-21
 
 - Fixed an issue for one captured frame being off while using AsyncGPUReadback request.
