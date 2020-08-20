@@ -3,10 +3,11 @@
     "references": [
         "Unity.Simulation.Capture",
         "Unity.Simulation.Core",
-        "UnityEngine.TestRunner",
-        "UnityEditor.TestRunner",
         "Unity.PerformanceTesting",
         "com.unity.simulation.tools"
+    ],
+    "optionalUnityReferences": [
+        "TestAssemblies"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

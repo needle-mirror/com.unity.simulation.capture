@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.10-preview.11] - 2020-08-20
+- Fixed Compile issues with 2020.1.
+- Added more test coverage for better stability.
+- Fixed FlipY issues with built-in rendering pipeline.
+- Fix for BlitCopyDepthHDRP errors while building URP project.
+- Support for configurable suffix for logfile names with options to add timestamp and/or seq number.
+
 ## [0.0.10-preview.10] - 2020-08-03
 - Fixed an issue for images coming out flipped for Metal Graphics API
 - Added a public API ShouldFlipY to check if the image readback from backbuffer needs to be flipped.

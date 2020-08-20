@@ -109,6 +109,12 @@ namespace Unity.Simulation
             }
         }
 
+        [RuntimeInitializeOnLoadMethod]
+        public static void ResetAsyncRequestOptionsOnShutdown()
+        {
+            Manager.Instance.ShutdownNotification += () => { AsyncRequest.maxAsyncRequestFrameAge = 0; };
+        }
+
 #if UNITY_2019_3_OR_NEWER
         /// <summary>
         /// Support for Scriptable Render Pipeline.
@@ -409,12 +415,14 @@ namespace Unity.Simulation
 
                     if (GraphicsUtilities.SupportsAsyncReadback())
                     {
+                        #if UNITY_2019_3_OR_NEWER
                         if (CaptureOptions.useBatchReadback)
                         {
                             QueueForAsyncBatchReadback(req, channel, functor, target);
                             ReleaseTargets();
                         }
                         else
+                        #endif
                         {
                             commandBuffer.RequestAsyncReadback(target, (AsyncGPUReadbackRequest request) =>
                             {
@@ -472,7 +480,8 @@ namespace Unity.Simulation
                 }
             }
         }
-
+        
+#if UNITY_2019_3_OR_NEWER
         static void QueueForAsyncBatchReadback(AsyncRequest<CaptureState> req,
             Channel channel,
             Func<AsyncRequest<CaptureState>, AsyncRequest.Result> functor,
@@ -498,15 +507,17 @@ namespace Unity.Simulation
             req.Enqueue(wrapper);
             req.Execute(AsyncRequest.ExecutionContext.EndOfFrame);
         }
+#endif
 
 
         /// <summary>
-        /// Check if for the given rendering pipline and GfxAPI there is a need to flip Y during the readback from the backbuffer.
+        /// Check if for the given rendering pipeline and GfxAPI there is a need to flip Y during the readback from the backbuffer.
         /// </summary>
         /// <param name="camera">Camera from which the readback is being performed.</param>
         /// <returns>A boolean indicating if the flip is required.</returns>
         public static bool ShouldFlipY(Camera camera)
         {
+#if UNITY_2019_3_OR_NEWER
             if (SRPSupport != null)
             {
                 switch (SRPSupport.GetCurrentPipelineRenderingType())
@@ -515,7 +526,7 @@ namespace Unity.Simulation
                     case RenderingPipelineType.URP:
                     {
                         return (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Direct3D11 || SystemInfo.graphicsDeviceType == GraphicsDeviceType.Metal) &&
-                            (camera.targetTexture != null || camera.cameraType == CameraType.Game);
+                            (camera.targetTexture == null && camera.cameraType == CameraType.Game);
                     }
 #endif
 #if HDRP_ENABLED
@@ -534,10 +545,8 @@ namespace Unity.Simulation
                     }
                 }
             }
-            else
-            {
-                return camera.targetTexture == null && GraphicsUtilities.SupportsAsyncReadback();
-            }
+#endif
+            return camera.targetTexture == null && GraphicsUtilities.SupportsAsyncReadback();
         }
 
         static RenderTexture SetupRenderTargets

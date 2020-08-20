@@ -1,10 +1,4 @@
-﻿
-#if UNITY_2020_1_OR_NEWER
-
-using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
-
+﻿#if UNITY_2020_2_OR_NEWER && PLATFORM_CLOUD_RENDERING && !UNITY_EDITOR
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -12,9 +6,8 @@ using UnityEngine.LowLevel;
 using UnityEngine.PlayerLoop;
 using System.Linq;
 using System;
-using UnityEngine.Rendering;
-using UnityEngine.Experimental.Rendering;
 using System.IO;
+using UnityEngine.CloudRendering;
 
 public class HeadlessCustomPlayerLoop
 {
@@ -29,13 +22,12 @@ public class HeadlessCustomPlayerLoop
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     static void Init()
     {
-#if UNITY_SERVER
         if (headlessTexture == null)
         {
             headlessTexture = new RenderTexture(640, 480, 1);
             if (headlessTexture.Create())
             {
-                Graphics.SetDefaultBackbufferSurface(headlessTexture);
+                CloudGraphics.SetDefaultBackbufferSurface(headlessTexture);
             }
             else
             {
@@ -44,7 +36,6 @@ public class HeadlessCustomPlayerLoop
         }
         var loopSystem = GenerateCustomLoop();
         PlayerLoop.SetPlayerLoop(loopSystem);
-#endif
     }
 
     static void Insert(ref PlayerLoopSystem playerLoopSystem, Type playerLoopType, Func<List<PlayerLoopSystem>, bool> function)

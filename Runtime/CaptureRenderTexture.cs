@@ -22,7 +22,8 @@ namespace Unity.Simulation
 #if !UNITY_2019_2_OR_NEWER && (PLATFORM_STANDALONE_OSX || UNITY_EDITOR)
             
             req.data = GraphicsUtilities.GetPixelsSlow(src as RenderTexture);
-            req.Start(functor);
+            req.Enqueue(functor);
+            req.Execute();
 #else
             if (GraphicsUtilities.SupportsAsyncReadback())
             {

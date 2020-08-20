@@ -7,9 +7,9 @@ namespace Unity.Simulation
 {   
     public class DepthGrab : MonoBehaviour
     {
-        public CaptureImageEncoder.ImageFormat _imageFormat = CaptureImageEncoder.ImageFormat.Raw;
+        public CaptureImageEncoder.ImageFormat _imageFormat = CaptureImageEncoder.ImageFormat.Jpg;
         public float               _screenCaptureInterval = 1.0f;
-        public GraphicsFormat      _format = GraphicsFormat.R16_UNorm;
+        public GraphicsFormat      _format = GraphicsFormat.R8G8B8A8_UNorm;
 
         float                      _elapsedTime;
         string                     _baseDirectory;

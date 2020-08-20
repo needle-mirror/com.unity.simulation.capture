@@ -51,8 +51,8 @@ namespace Unity.Simulation
         }
 
 #if !UNITY_2019_3_OR_NEWER
-        static Dictionary<GraphicsFormat, int> _blockSizeMap;
-        static Dictionary<GraphicsFormat, int> _componentCountMap;
+        static Dictionary<GraphicsFormat, int> _blockSizeMap = new Dictionary<GraphicsFormat, int>();
+        static Dictionary<GraphicsFormat, int> _componentCountMap = new Dictionary<GraphicsFormat, int>();
 
         [RuntimeInitializeOnLoadMethod]
         static void SetupAlternateGetBlockSize()

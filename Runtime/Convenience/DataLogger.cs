@@ -1,12 +1,18 @@
 ﻿using System;
 using System.IO;
 using System.Text;
-
+using System.Timers;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 
 namespace Unity.Simulation
 {
+    public enum LoggerSuffixOption
+    {
+        TIME_STAMP,
+        SEQ_NO,
+        BOTH
+    }
     public abstract class BaseLogger
     {
         protected string _type;
@@ -14,13 +20,19 @@ namespace Unity.Simulation
         protected string _name;
         protected string _extension;
         protected int _sequence = 0;
+        protected Func<string> _suffixAction;
 
-        public void SetOutputPath(string type, string name, string extension, string userPath = "")
+
+        protected LoggerSuffixOption _loggerSuffixOption = LoggerSuffixOption.SEQ_NO;
+
+        public void SetOutputPath(string type, string name, string extension, string userPath = "", Func<string> suffixAppend = null, LoggerSuffixOption option = LoggerSuffixOption.SEQ_NO)
         {
             _type = type;
             _userPath = userPath;
             _name = name;
             _extension = extension;
+            _suffixAction = suffixAppend;
+            _loggerSuffixOption = option;
 
             var path = Manager.Instance.GetDirectoryFor(_type, _userPath);
             if (!Directory.Exists(path))
@@ -31,7 +43,27 @@ namespace Unity.Simulation
 
         public string GetPath()
         {
-            return Path.Combine(Manager.Instance.GetDirectoryFor(_type, _userPath), string.Format("{0}_{1}{2}", _name, _sequence++, _extension));
+            var suffix = _suffixAction?.Invoke();
+            if (String.IsNullOrEmpty(suffix))
+            {
+                switch (_loggerSuffixOption)
+                {
+                    case LoggerSuffixOption.SEQ_NO:
+                        suffix = _sequence++ + "";
+                        break;
+                    case LoggerSuffixOption.TIME_STAMP:
+                        suffix = DateTime.UtcNow.ToString("yyyy-MM-ddThh-mm-ss");
+                        break;
+                    case LoggerSuffixOption.BOTH:
+                        suffix = DateTime.UtcNow.ToString("yyyy-MM-ddThh-mm-ss") + "_" + (_sequence++);
+                        break;
+                }
+            }
+            else
+            {
+                suffix += "_"+(_sequence++);
+            }
+            return Path.Combine(Manager.Instance.GetDirectoryFor(_type, _userPath), string.Format("{0}_{1}{2}", _name, suffix, _extension));
         }
     }
 
@@ -50,13 +82,15 @@ namespace Unity.Simulation
         /// <param name="logName">Name of the DataCapture Log file.</param>
         /// <param name="bufferSize">This corresponds to the file size (in KB). Default is set to 8192.</param>
         /// <param name="userPath">Location of the log file. Default is set to Application persistent path.</param>
-        public Logger(string logName, int bufferSize = 8192, int maxElapsedSeconds = kDefaultMaxElapsedSeconds, string userPath = "")
+        public Logger(string logName, int bufferSize = 8192, int maxElapsedSeconds = kDefaultMaxElapsedSeconds, 
+            string userPath = "", 
+            LoggerSuffixOption suffixOption = LoggerSuffixOption.SEQ_NO, Func<string> customSuffix = null)
         {
             this.bufferSize = bufferSize;
 
             var name = string.IsNullOrEmpty(logName) ? kDefaultFileName  : Path.GetFileNameWithoutExtension(logName);
             var ext  = string.IsNullOrEmpty(Path.GetExtension(logName)) ? kDefaultExtension : Path.GetExtension(logName);
-            SetOutputPath(DataCapturePaths.Logs, name, ext, userPath);
+            SetOutputPath(DataCapturePaths.Logs, name, ext, userPath, customSuffix, suffixOption);
         
             _producer = new Unity.Simulation.ChunkedStream(bufferSize:this.bufferSize, maxElapsedSeconds: maxElapsedSeconds, functor:(AsyncRequest<object> request) =>
             {

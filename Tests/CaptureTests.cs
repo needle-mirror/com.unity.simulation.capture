@@ -11,6 +11,8 @@ using Unity.Simulation;
 
 using UnityEngine.TestTools;
 using NUnit.Framework;
+using UnityEditor;
+using Object = UnityEngine.Object;
 #if ENABLE_CLOUDTESTS
 using Unity.Simulation.Tools;
 #endif
@@ -24,6 +26,7 @@ public class CaptureTests
     [SetUp]
     public void Reset()
     {
+        AsyncRequest.maxJobSystemParallelism = 3;
         var dir = Application.persistentDataPath;
         if (Directory.Exists(dir))
         {
@@ -40,10 +43,32 @@ public class CaptureTests
         }
     }
     
+    List<Object> m_ObjectsToDestroy = new List<Object>();
+    [TearDown]
+    public void TearDown()
+    {
+        foreach (var o in m_ObjectsToDestroy)
+            Object.DestroyImmediate(o);
+
+        m_ObjectsToDestroy.Clear();
+    }
+
+    public void AddTestObjectForCleanup(Object @object) => m_ObjectsToDestroy.Add(@object);
+
+    public void DestroyTestObject(Object @object)
+    {
+        Object.DestroyImmediate(@object);
+        m_ObjectsToDestroy.Remove(@object);
+    }
     
     [UnityTest]
     public IEnumerator CaptureTest_ComputeBuffer()
     {
+        if (!SystemInfo.supportsComputeShaders)
+        {
+            Debug.Log("Compute Shader not supported to passing the test!");
+            yield break;
+        }
         const int kNumberOfFloats = 8000;
 
         Debug.Assert(SystemInfo.supportsComputeShaders, "Compute shaders are not supported.");
@@ -283,7 +308,7 @@ public class CaptureTests
         Debug.Assert(count == 0, "depth buffers differ by " + count);
     }
 
-    Camera SetupCameraWithRenderTexture(int width, int height, GraphicsFormat renderTextureFormat, float near = 0.1f, float far = 1000, float fov = 60)
+    Camera SetupCameraWithRenderTexture(int width, int height, GraphicsFormat renderTextureFormat, float near = 0.1f, float far = 1000)
     {
         var go = new GameObject("DataCaptureTestsCamera");
         
@@ -293,20 +318,27 @@ public class CaptureTests
         camera.transform.rotation = Quaternion.identity;
         camera.nearClipPlane = near;
         camera.farClipPlane = far;
+        camera.orthographic = true;
+        camera.orthographicSize = 1;
         camera.fieldOfView = 45;
         camera.targetTexture = new RenderTexture(width, height, 0, renderTextureFormat);
 
         RenderTexture.active = null;
+        
+        AddTestObjectForCleanup(go);
 
         return camera;
     }
 
     Camera SetupCameraTestWithMaterial(int depthBpp, GraphicsFormat renderTextureFormat, Vector3 gopos, float near = 0.1f, float far = 1000)
     {
-        var camera = SetupCameraWithRenderTexture(32, 32, renderTextureFormat, near, far, 45);
+        var camera = SetupCameraWithRenderTexture(32, 32, renderTextureFormat, near, far);
 
         if (depthBpp > 0)
             camera.depthTextureMode = DepthTextureMode.Depth;
+        
+        var plane = CreatePlaneInFrontOfCamera(kTestColor);
+        plane.transform.position = gopos;
 
         var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
         cube.transform.position = gopos;
@@ -482,21 +514,20 @@ public class CaptureTests
     {
         var camera = SetupCameraWithRenderTexture(2, 2, GraphicsFormat.R8G8B8A8_UNorm);
 
-        var texture = new Texture2D(2, 2, TextureFormat.RGB24, false);
-        texture.SetPixel(0, 0, Color.black);
-        texture.SetPixel(1, 0, Color.black);
-        texture.SetPixel(0, 1, Color.red);
-        texture.SetPixel(1, 1, Color.red);
-        texture.Apply();
-
-        Graphics.Blit(texture, camera.targetTexture);
-
         var imagePath = Path.Combine(Application.persistentDataPath, "upright.png");
 
         var useAsyncReadbackIfSupported = CaptureOptions.useAsyncReadbackIfSupported;
         CaptureOptions.useAsyncReadbackIfSupported = fastPath;
 
         var request = CaptureCamera.CaptureColorToFile(camera, GraphicsFormat.R8G8B8A8_UNorm, imagePath, CaptureImageEncoder.ImageFormat.Png);
+        
+        var plane1 = CreatePlaneInFrontOfCamera(Color.black, .1f);
+        //position on the bottom half of the screen, in front of plane2
+        plane1.transform.localPosition = new Vector3(0, -.5f, .5f);
+        plane1.transform.localScale = new Vector3(1, -1f, .1f);
+        var plane2 = CreatePlaneInFrontOfCamera(Color.red);
+        plane2.transform.localPosition = new Vector3(0, 0, 1f);
+        plane2.transform.localScale = new Vector3(1, -1f, 1f);
 
         camera.clearFlags = CameraClearFlags.Nothing;
         camera.Render();
@@ -507,7 +538,8 @@ public class CaptureTests
         CaptureOptions.useAsyncReadbackIfSupported = useAsyncReadbackIfSupported;
 
         Assert.True(request.error == false);
-
+        
+        var texture = new Texture2D(2, 2, TextureFormat.RGB24, false);
         texture.LoadImage(File.ReadAllBytes(imagePath));
 
         Assert.True(CompareColors(texture.GetPixel(0, 0), Color.black));
@@ -534,4 +566,19 @@ public class CaptureTests
         yield return CaptureColorAndEnsureUpright(false);
     }
 #endif // UNITY_2019_3_OR_NEWER
+    
+    public GameObject CreatePlaneInFrontOfCamera(Color color, float scale = 1)
+    {
+        GameObject planeObject;
+        planeObject = GameObject.CreatePrimitive(PrimitiveType.Plane);
+        planeObject.transform.SetPositionAndRotation(new Vector3(0, 0, 10), Quaternion.Euler(90, 0, 0));
+        planeObject.transform.localScale = new Vector3(scale, -1, scale);
+
+        var material = new Material(Shader.Find("Hidden/DataCaptureTestsUnlitShader"));
+        material.color = color;
+
+        planeObject.GetComponent<MeshRenderer>().sharedMaterial = material;
+        AddTestObjectForCleanup(planeObject);
+        return planeObject;
+    }
 }
