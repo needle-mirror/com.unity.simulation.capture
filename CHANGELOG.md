@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.10-preview.12] - 2020-08-26
+
+- Update dependency to com.unity.simulation.core@0.0.10-preview.19
+
 ## [0.0.10-preview.11] - 2020-08-20
 - Fixed Compile issues with 2020.1.
 - Added more test coverage for better stability.
