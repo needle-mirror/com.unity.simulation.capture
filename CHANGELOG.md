@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.0.10-preview.13] - 2020-08-27
+
+- Add HDRP_DISABLED shader variant to avoid shader compiler include errors when compiling HDRP shaders for other pipelines.
+- Updated com.unity.simulation.editor asmdef, name and added version defines for graphics pipelines.
+- Updated CaptureCamera.SelectDepthShaderVariant to select HDRP_ENABLED keyword for that pipeline.
+
 ## [0.0.10-preview.12] - 2020-08-26
 
 - Update dependency to com.unity.simulation.core@0.0.10-preview.19

@@ -613,20 +613,36 @@ namespace Unity.Simulation
 
         static Material SelectDepthShaderVariant(GraphicsFormat format)
         {
-            // Lazily initialize _depthCopyMaterial. This could be done somewhere else.
             if (_depthCopyMaterials == null)
             {
                 _depthCopyMaterials = new Material[4];
-                for (var i = 0; i < _depthCopyMaterials.Length; ++i)
+#if HDRP_ENABLED
+                if (SRPSupport.GetCurrentPipelineRenderingType() == RenderingPipelineType.HDRP)
                 {
-                    _depthCopyMaterials[i] = new Material(Shader.Find("usim/BlitCopyDepth"));
-                    _depthCopyMaterials[i].EnableKeyword($"CHANNELS{i + 1}");
-                };
+                    _depthCopyMaterials[0] = new Material(Shader.Find("usim/BlitCopyDepthHDRP"));
+                    _depthCopyMaterials[0].EnableKeyword("HDRP_ENABLED");
+                }
+                else
+#endif // HDRP_ENABLED
+                {
+                    for (var i = 0; i < _depthCopyMaterials.Length; ++i)
+                    {
+                        _depthCopyMaterials[i] = new Material(Shader.Find("usim/BlitCopyDepth"));
+                        _depthCopyMaterials[i].EnableKeyword($"CHANNELS{i + 1}");
+                    };
+                }
             }
 
-            var componentCount = GraphicsUtilities.GetComponentCount(format);
-            Debug.Assert(componentCount >= 1 && componentCount <= 4);
-            return _depthCopyMaterials[componentCount - 1];
+#if HDRP_ENABLED
+            if (SRPSupport.GetCurrentPipelineRenderingType() == RenderingPipelineType.HDRP)
+                return _depthCopyMaterials[0];
+            else
+#endif // HDRP_ENABLED
+            {
+                var componentCount = GraphicsUtilities.GetComponentCount(format);
+                Debug.Assert(componentCount >= 1 && componentCount <= 4);
+                return _depthCopyMaterials[componentCount - 1];
+            }
         }
 
         static Material[] _depthCopyMaterials;
