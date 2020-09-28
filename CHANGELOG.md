@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.10-preview.14] - 2020-09-28
+
+- Add !USIM_USE_BUILTIN_JPG_ENCODER around JpegEncoder.cs
+  This native plugin is only supported on Windows, Mac, Linux, but the builtin jpeg encoder can be enabled
+  by setting the build define USIM_USE_BUILTIN_JPG_ENCODER. This change also removes the JpegEncoder.cs
+  source that uses the native plugin.
+
 ## [0.0.10-preview.13] - 2020-08-27
 
 - Add HDRP_DISABLED shader variant to avoid shader compiler include errors when compiling HDRP shaders for other pipelines.

@@ -1,4 +1,5 @@
-﻿using System;
+﻿#if !USIM_USE_BUILTIN_JPG_ENCODER
+using System;
 using System.Runtime.InteropServices;
 
 using UnityEngine;
@@ -287,3 +288,4 @@ public class JpegEncoder
         return buffer;
     }
 }
+#endif // !USIM_USE_BUILTIN_JPG_ENCODER
