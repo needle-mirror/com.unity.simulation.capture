@@ -1,5 +1,8 @@
 # Changelog
 
+## [0.0.10-preview.15] - 2020-10-27
+Adding support for cloud rendering build target starting 2019.4 and above
+
 ## [0.0.10-preview.14] - 2020-09-28
 
 - Add !USIM_USE_BUILTIN_JPG_ENCODER around JpegEncoder.cs

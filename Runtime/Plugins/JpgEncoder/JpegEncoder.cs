@@ -257,17 +257,17 @@ public class JpegEncoder
 
         int size = 0;
 
-        var elementSize = Marshal.SizeOf(raw.GetValue(0).GetType());
-        var jpgData = new byte[raw.Length * elementSize];
+        var temp = new byte[raw.Length];
 
-        var result = tjCompress(encoder, raw, width, 0, height, pixelSize, jpgData, ref size, 0, quality, (int)flags);
+        var result = tjCompress(encoder, raw, width, 0, height, pixelSize, temp, ref size, 0, quality, (int)flags);
 
         tjDestroy(encoder);
 
         if (result < 0)
             return null;
 
-        Array.Resize(ref jpgData, size);
+        var jpgData = new byte[size];
+        Array.Copy(temp, 0, jpgData, 0, size);
 
         return jpgData;
     }

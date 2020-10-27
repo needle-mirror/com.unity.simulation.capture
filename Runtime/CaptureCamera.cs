@@ -525,8 +525,12 @@ namespace Unity.Simulation
 #if URP_ENABLED
                     case RenderingPipelineType.URP:
                     {
+#if !PLATFORM_CLOUD_RENDERING
                         return (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Direct3D11 || SystemInfo.graphicsDeviceType == GraphicsDeviceType.Metal) &&
-                            (camera.targetTexture == null && camera.cameraType == CameraType.Game);
+                               (camera.targetTexture == null && camera.cameraType == CameraType.Game);
+#endif
+                        goto default;
+
                     }
 #endif
 #if HDRP_ENABLED

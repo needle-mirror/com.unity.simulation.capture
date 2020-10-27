@@ -1,4 +1,4 @@
-﻿#if UNITY_2020_2_OR_NEWER && PLATFORM_CLOUD_RENDERING && !UNITY_EDITOR
+﻿#if PLATFORM_CLOUD_RENDERING && !UNITY_EDITOR
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -19,7 +19,7 @@ public class HeadlessCustomPlayerLoop
 
     public static RenderTexture headlessTexture;
     
-    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void Init()
     {
         if (headlessTexture == null)
@@ -59,7 +59,7 @@ public class HeadlessCustomPlayerLoop
 
     private static PlayerLoopSystem GenerateCustomLoop()
     {
-        var playerLoop = PlayerLoop.GetDefaultPlayerLoop();
+        var playerLoop = PlayerLoop.GetCurrentPlayerLoop();
 
         Insert(ref playerLoop, typeof(PostLateUpdate), (subSystemList) =>
         {
