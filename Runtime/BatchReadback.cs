@@ -4,207 +4,168 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Threading;
 using Unity.Collections;
-using Unity.Simulation;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering;
 
-public class BatchReadback
+namespace Unity.Simulation
 {
-    private BatchReadback() { }
-
-    private static BatchReadback _instance;
-
-    public static BatchReadback Instance()
+    public class BatchReadback
     {
-        if (_instance == null)
+        static BatchReadback _instance;
+
+        public static BatchReadback Instance
         {
-            _instance = new BatchReadback();
-            _instance._useAsyncReadback = SystemInfo.supportsAsyncGPUReadback;
-            Manager.Instance.ShutdownNotification += _instance.FlushRequestsPool;
+            get
+            {
+                if (_instance == null)
+                {
+                    _instance = new BatchReadback();
+                    Manager.Instance.ShutdownNotification += _instance.FlushRequestsPool;
+                }
+                return _instance;
+            }
         }
 
-        return _instance;
-    }
-
-    public int                          BatchSize         = 50; 
-    private Queue<ReadbackRequest>      _requestsBatch    = new Queue<ReadbackRequest>();
-    private Queue<ReadbackRequest>      _requestsPool     = new Queue<ReadbackRequest>();
-    private bool                        _useAsyncReadback;
-
-
-    /// <summary>
-    /// Queue a rendertexture for readback. The readback will happen after the number of requests reaches the batchsize.
-    /// </summary>
-    /// <param name="renderTexture">Render texture for readback</param>
-    /// <param name="callback">Callback that needs to be invoked after the readback for provided render texture is complete</param>
-    public void QueueReadback(RenderTexture renderTexture, Func<object, AsyncRequest.Result> callback)
-    {
-        var req = GetReadBackRequestFromPool(renderTexture);
-        req.readbackAction = callback;
-        Graphics.Blit(renderTexture, req.renderTexture);
-        _requestsBatch.Enqueue(req);
-
-        if (_requestsBatch.Count == BatchSize)
+        public void Shutdown()
         {
-            if (_useAsyncReadback)
-            {
+            Flush();
+            _instance = null;
+        }
+
+        public int BatchSize = 50;
+
+        Queue<ReadbackRequest> _requestsBatch = new Queue<ReadbackRequest>();
+        Queue<ReadbackRequest> _requestsPool  = new Queue<ReadbackRequest>();
+
+        /// <summary>
+        /// Queue a rendertexture for readback. The readback will happen after the number of requests reaches the batchsize.
+        /// </summary>
+        /// <param name="request">The request associated with this batch readback instance.</param>
+        /// <param name="channel">Which channel this readback is for.</param>
+        /// <param name="renderTexture">Render texture to readback.</param>
+        public void QueueReadback(AsyncRequest<CaptureCamera.CaptureState> request, CaptureCamera.Channel channel, RenderTexture renderTexture)
+        {
+            Debug.Assert(request.data.GetFunctor(channel) != null, $"QueueReadback request has no completion function for {channel} channel");
+
+            var rbr = GetReadBackRequestFromPool(request, channel, renderTexture);
+            _requestsBatch.Enqueue(rbr);
+            if (_requestsBatch.Count == BatchSize)
+                Flush();
+        }
+
+        void Flush()
+        {
+            if (GraphicsUtilities.SupportsAsyncReadback())
                 ProcessBatchAsync();
-            }
             else
-            {
                 ProcessBatch();
-            }
         }
-    }
 
-    private ReadbackRequest GetReadBackRequestFromPool(RenderTexture renderTexture)
-    {
-        ReadbackRequest request;
-        if (_requestsPool.Count > 0)
+        ReadbackRequest GetReadBackRequestFromPool(AsyncRequest<CaptureCamera.CaptureState> request, CaptureCamera.Channel channel, RenderTexture renderTexture)
         {
-            request = _requestsPool.Dequeue();
-        }
-        else
-        {
-            request = new ReadbackRequest()
+            ReadbackRequest rbr;
+            if (_requestsPool.Count > 0)
             {
-                renderTexture = new RenderTexture(renderTexture.width, renderTexture.height,  renderTexture.depth, renderTexture.graphicsFormat)
-            };
-        }
-        
-        Debug.Assert(request.renderTexture.width == renderTexture.width 
-                     && request.renderTexture.height == renderTexture.height 
-                     && request.renderTexture.graphicsFormat == renderTexture.graphicsFormat);
-        
-        return request;
-    }
-
-    private void ProcessBatchAsync()
-    {
-        Debug.Assert(_useAsyncReadback == SystemInfo.supportsAsyncGPUReadback);
-
-        while (_requestsBatch.Count > 0)
-        {
-            var request = _requestsBatch.Dequeue();
-            AsyncGPUReadback.Request(request.renderTexture, 0, (asyncRequest) =>
-            {
-                if (asyncRequest.hasError)
-                {
-                    Debug.LogError("Async GPUReadbackRequest failed!");
-                }
-                else
-                {
-                    request.readbackAction(asyncRequest.GetData<byte>().ToArray());
-                }
-                _requestsPool.Enqueue(request);
-            });
-        }
-    }
-
-    private void ProcessBatch()
-    {
-        
-        while(_requestsBatch.Count > 0)
-        {
-            var request = _requestsBatch.Dequeue();
-            var graphicsFormat = GraphicsFormatUtility.GetGraphicsFormat(request.renderTexture.format, false);
-            var pixelSize = GraphicsFormatUtility.GetBlockSize(graphicsFormat);
-            var channels = GraphicsFormatUtility.GetComponentCount(graphicsFormat);
-            var channelSize = pixelSize / channels;
-            var rect = new Rect(0, 0, request.renderTexture.width, request.renderTexture.height);
-
-            if (channels >= 3 && channels <= 4)
-            {
-                if (request.texture == null)
-                    request.texture = new Texture2D(request.renderTexture.width, request.renderTexture.height, request.renderTexture.graphicsFormat, TextureCreationFlags.None);
-                RenderTexture.active = request.renderTexture;
-                request.texture.ReadPixels(rect, 0, 0);
-                request.InvokeCallback(request.texture.GetRawTextureData());
-                RenderTexture.active = null;
+                rbr = _requestsPool.Dequeue();
             }
             else
             {
-                Debug.Assert(channels == 1, "Can only handle a single channel RT.");
-
-                // Read pixels must be one of RGBA32, ARGB32, RGB24, RGBAFloat or RGBAHalf.
-                // So R16 and RFloat will be converted to RGBAFloat.
-                var texture = new Texture2D(request.renderTexture.width, request.renderTexture.height, TextureFormat.RGBAFloat, false);
-                RenderTexture.active = request.renderTexture;
-                texture.ReadPixels(rect, 0, 0);
-                RenderTexture.active = null;
-
-                var length = request.renderTexture.width * request.renderTexture.height;
-                var input  = ArrayUtilities.Cast<float>(texture.GetRawTextureData());
-                UnityEngine.Object.Destroy(texture);
-
-                int index = 0;
-                switch (channelSize)
-                {
-                    case 2:
-                        short[] shorts = ArrayUtilities.Allocate<short>(length);
-                        var si = 0;
-                        var numerator = (1<<16)-1;
-                        while (index < length)
-                        {
-                            shorts[index++] = (short)(numerator * input[si]);
-                            si += 4;
-                        }
-                        var shortOutputNativeArray = new NativeArray<byte>(ArrayUtilities.Cast<byte>(shorts), Allocator.Persistent);
-                        request.InvokeCallback(ArrayUtilities.Cast<byte>(shorts));
-                        break;
-                    case 4:
-                        float[] floats = ArrayUtilities.Allocate<float>(length);
-                        var fi = 0;
-                        while (index < length)
-                        {
-                            floats[index++] = input[fi];
-                            fi += 4;
-                        }
-                        var floatOutputNativeArray = new NativeArray<byte>(ArrayUtilities.Cast<byte>(floats), Allocator.Persistent);
-                        request.InvokeCallback(ArrayUtilities.Cast<byte>(floats));
-                        break;
-                    default:
-                        throw new NotSupportedException();
-                }
+                rbr = new ReadbackRequest();
             }
 
-            
-            _requestsPool.Enqueue(request);
+            rbr.request  = request;
+            rbr.channel  = channel;
+            rbr.callback = request.data.SetFunctor(channel, null);
+
+            if (rbr.renderTexture == null ||
+                rbr.renderTexture.width != renderTexture.width ||
+                rbr.renderTexture.height != renderTexture.height ||
+                !rbr.renderTexture.CompareFormat(renderTexture.graphicsFormat))
+                rbr.renderTexture = new RenderTexture(renderTexture);
+
+            Graphics.Blit(renderTexture, rbr.renderTexture);
+
+            return rbr;
+        }
+
+        void ProcessBatchAsync()
+        {
+            while (_requestsBatch.Count > 0)
+            {
+                var request = _requestsBatch.Dequeue();
+                AsyncGPUReadback.Request(request.renderTexture, 0, (asyncRequest) =>
+                {
+                    if (asyncRequest.hasError)
+                    {
+                        Log.E("Async GPUReadbackRequest failed!");
+                    }
+                    else
+                    {
+                        request.InvokeCallback(asyncRequest.GetData<byte>().ToArray());
+                    }
+                    _requestsPool.Enqueue(request);
+                });
+            }
+        }
+
+        void ProcessBatch()
+        {
+            while(_requestsBatch.Count > 0)
+            {
+                var request = _requestsBatch.Dequeue();
+
+                request.InvokeCallback(GraphicsUtilities.GetPixelsSlow(request.renderTexture));
+                _requestsPool.Enqueue(request);
+            }
+        }
+        
+        void FlushRequestsPool()
+        {
+            while(_requestsBatch.Count > 0)
+                ProcessBatch();
         }
     }
-    
-    private void FlushRequestsPool()
-    {
-        while(_requestsBatch.Count > 0)
-            ProcessBatch();
-    }
-}
 
-public class ReadbackRequest
-{
-    /// <summary>
-    /// Callback that needs to be invoked after readback request is finished executing.
-    /// </summary>
-    public Func<object, AsyncRequest.Result> readbackAction;
-    
-    /// <summary>
-    /// Render texture for which the readback is requested
-    /// </summary>
-    public RenderTexture                     renderTexture;
-    
-    /// <summary>
-    /// Texture to which the readback data is to be copied to.
-    /// </summary>
-    public Texture2D                         texture;
-
-    /// <summary>
-    /// Invoke the readbackAction callback upon completion of the request.
-    /// </summary>
-    /// <param name="data"></param>
-    public void InvokeCallback(byte[] data)
+    public class ReadbackRequest
     {
-        readbackAction?.Invoke(data);
+        /// <summary>
+        /// The request associated with this batched readback instance.
+        /// </summary>
+        public AsyncRequest<CaptureCamera.CaptureState> request;
+
+        /// <summary>
+        /// Channel this readback request is for.
+        /// </summary>
+        public CaptureCamera.Channel channel;
+
+        /// <summary>
+        /// Render texture for which the readback is requested
+        /// </summary>
+        public RenderTexture renderTexture;
+        
+        /// <summary>
+        /// Texture to which the readback data is to be copied to.
+        /// </summary>
+        public Texture2D texture;
+
+        /// <summary>
+        /// Completion callback function.
+        /// </summary>
+        public Func<AsyncRequest<CaptureCamera.CaptureState>, AsyncRequest.Result> callback;
+
+        /// <summary>
+        /// Invoke the request functor upon completion of the readback request.
+        /// </summary>
+        /// <param name="data"></param>
+        public void InvokeCallback(byte[] data)
+        {
+            Debug.Assert(data != null && data.Length != 0);
+            Debug.Assert(callback != null);
+            request.data.SetBuffer(channel, data);
+            request.Enqueue(callback);
+            request.Execute();
+        }
     }
 }
 #endif // UNITY_2019_3_OR_NEWER

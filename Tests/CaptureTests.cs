@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Threading.Tasks;
 
 using UnityEngine;
@@ -12,6 +13,7 @@ using Unity.Simulation;
 using UnityEngine.TestTools;
 using NUnit.Framework;
 using UnityEditor;
+using Debug = UnityEngine.Debug;
 using Object = UnityEngine.Object;
 #if ENABLE_CLOUDTESTS
 using Unity.Simulation.Tools;
@@ -20,8 +22,6 @@ using Unity.Simulation.Tools;
 public class CaptureTests
 {
     readonly Color32 kTestColor = Color.blue;
-
-
 
     [SetUp]
     public void Reset()
@@ -42,8 +42,9 @@ public class CaptureTests
             }
         }
     }
-    
+
     List<Object> m_ObjectsToDestroy = new List<Object>();
+
     [TearDown]
     public void TearDown()
     {
@@ -60,7 +61,7 @@ public class CaptureTests
         Object.DestroyImmediate(@object);
         m_ObjectsToDestroy.Remove(@object);
     }
-    
+
     [UnityTest]
     public IEnumerator CaptureTest_ComputeBuffer()
     {
@@ -320,7 +321,6 @@ public class CaptureTests
         camera.farClipPlane = far;
         camera.orthographic = true;
         camera.orthographicSize = 1;
-        camera.fieldOfView = 45;
         camera.targetTexture = new RenderTexture(width, height, 0, renderTextureFormat);
 
         RenderTexture.active = null;
@@ -340,18 +340,6 @@ public class CaptureTests
         var plane = CreatePlaneInFrontOfCamera(kTestColor);
         plane.transform.position = gopos;
 
-        var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
-        cube.transform.position = gopos;
-
-        var renderer = cube.GetComponent<Renderer>();
-        Debug.Assert(renderer != null);
-
-        var shader = Shader.Find("Hidden/DataCaptureTestsUnlitShader");
-        Debug.Assert(shader != null);
-
-        renderer.material.shader = shader;
-        renderer.material.color = kTestColor;
-
         return camera;
     }
 
@@ -361,7 +349,14 @@ public class CaptureTests
 
         var camera = SetupCameraTestWithMaterial(depthBpp, renderTextureFormat, new Vector3(0, 0, 1.0f));
 
-        var request = CaptureCamera.Capture(camera, colorFunctor: AsyncRequest<CaptureCamera.CaptureState>.DontCare, depthFunctor: AsyncRequest<CaptureCamera.CaptureState>.DontCare, depthFormat: GraphicsUtilities.DepthFormatForDepth(depthBpp));
+        var request = CaptureCamera.Capture
+        (
+            camera, 
+            colorFunctor: AsyncRequest<CaptureCamera.CaptureState>.DontCare, 
+            depthFunctor: AsyncRequest<CaptureCamera.CaptureState>.DontCare, 
+            depthFormat: GraphicsUtilities.DepthFormatForDepth(depthBpp),
+            forceFlip: ForceFlip.None
+        );
 
         camera.Render();
 
@@ -509,6 +504,21 @@ public class CaptureTests
         return Math.Abs(a.r - b.r) < 1e-6f && Math.Abs(a.g - b.g) < 1e-6f && Math.Abs(a.b - b.b) < 1e-6f;
     }
 
+    public GameObject CreatePlaneInFrontOfCamera(Color color, float scale = 1)
+    {
+        GameObject planeObject;
+        planeObject = GameObject.CreatePrimitive(PrimitiveType.Plane);
+        planeObject.transform.SetPositionAndRotation(new Vector3(0, 0, 10), Quaternion.Euler(90, 0, 0));
+        planeObject.transform.localScale = new Vector3(scale, -1, scale);
+
+        var material = new Material(Shader.Find("Hidden/DataCaptureTestsUnlitShader"));
+        material.color = color;
+        
+        planeObject.GetComponent<MeshRenderer>().sharedMaterial = material;
+        AddTestObjectForCleanup(planeObject);
+        return planeObject;
+    }
+
 #if UNITY_2019_3_OR_NEWER
     IEnumerator CaptureColorAndEnsureUpright(bool fastPath)
     {
@@ -529,7 +539,6 @@ public class CaptureTests
         plane2.transform.localPosition = new Vector3(0, 0, 1f);
         plane2.transform.localScale = new Vector3(1, -1f, 1f);
 
-        camera.clearFlags = CameraClearFlags.Nothing;
         camera.Render();
 
         while (!request.completed)
@@ -538,7 +547,7 @@ public class CaptureTests
         CaptureOptions.useAsyncReadbackIfSupported = useAsyncReadbackIfSupported;
 
         Assert.True(request.error == false);
-        
+
         var texture = new Texture2D(2, 2, TextureFormat.RGB24, false);
         texture.LoadImage(File.ReadAllBytes(imagePath));
 
@@ -566,19 +575,211 @@ public class CaptureTests
         yield return CaptureColorAndEnsureUpright(false);
     }
 #endif // UNITY_2019_3_OR_NEWER
-    
-    public GameObject CreatePlaneInFrontOfCamera(Color color, float scale = 1)
+
+    private class AsyncRequestWrapper
     {
-        GameObject planeObject;
-        planeObject = GameObject.CreatePrimitive(PrimitiveType.Plane);
-        planeObject.transform.SetPositionAndRotation(new Vector3(0, 0, 10), Quaternion.Euler(90, 0, 0));
-        planeObject.transform.localScale = new Vector3(scale, -1, scale);
+        public AsyncRequest Request { get; }
 
-        var material = new Material(Shader.Find("Hidden/DataCaptureTestsUnlitShader"));
-        material.color = color;
+        public int FrameIndex { get; }
 
-        planeObject.GetComponent<MeshRenderer>().sharedMaterial = material;
-        AddTestObjectForCleanup(planeObject);
-        return planeObject;
+        public AsyncRequestWrapper(AsyncRequest req, int frameIndex)
+        {
+            Request = req;
+            FrameIndex = frameIndex;
+        }
+    }
+
+    [Serializable]
+    private class CaptureFrameWithLogDataPoint
+    {
+        public string imageName;
+
+        public CaptureFrameWithLogDataPoint(string imageName)
+        {
+            this.imageName = imageName;
+        }
+    }
+
+    private bool IsExecutionContextThreaded()
+    {
+        switch (AsyncRequest.defaultExecutionContext)
+        {
+            case AsyncRequest.ExecutionContext.ThreadPool:
+            case AsyncRequest.ExecutionContext.JobSystem:
+                return true;
+
+            default:
+                return false;
+        }
+    }
+
+    private AsyncRequestWrapper CaptureFrameWithLog(
+        Camera camera, 
+        Unity.Simulation.Logger logger,
+        string screenCapturePath,
+        string frameFileNameRoot,
+        int frameIndex
+    )
+    {
+        // Construct the output file name for the image.
+        string frameFileBaseName = $"{frameFileNameRoot}_{frameIndex}";
+        string frameFilePath = $"{screenCapturePath}{Path.DirectorySeparatorChar}{frameFileBaseName}.jpg";
+
+        void LogData()
+        {
+            logger.Log(new CaptureFrameWithLogDataPoint(frameFileBaseName));
+        }
+
+        // Write the frame entry to the log. Write the log line outside the request callback when the
+        // execution context is threaded since threaded requests will be executed asynchronously.
+        if (IsExecutionContextThreaded())
+        {
+            LogData();
+        }
+
+        var req = CaptureCamera.Capture(
+            camera,
+            request =>
+            {
+                // Write the frame entry to the log. We can write the log line within the request callback when
+                // the execution context is *not* threaded since they will be executed sequentially.
+                if (!IsExecutionContextThreaded())
+                {
+                    LogData();
+                }
+
+                // Get the color buffer data and convert it to an image file.
+                byte[] imgColorData = (byte[]) request.data.colorBuffer;
+                byte[] imgFileData = (byte[]) CaptureImageEncoder.EncodeArray(
+                    imgColorData,
+                    32,
+                    32,
+                    GraphicsFormat.R8G8B8A8_UNorm,
+                    CaptureImageEncoder.ImageFormat.Jpg
+                );
+
+                // Attempt to write the image file to disk.
+                bool fileWritten = FileProducer.Write(frameFilePath, imgFileData);
+                return (fileWritten) ? AsyncRequest.Result.Completed : AsyncRequest.Result.Error;
+            },
+            flipY: false
+        );
+
+        return new AsyncRequestWrapper(req, frameIndex);
+    }
+
+#if ENABLE_CLOUDTESTS
+    [CloudTest]
+#endif
+    [UnityTest]
+    public IEnumerator CaptureTest_CaptureLogAlignment()
+    {
+        const int NumFramesToCapture = 10;
+        const double RequestTimeoutInSeconds = NumFramesToCapture * 10.0;
+
+        Assert.Greater(
+            NumFramesToCapture,
+            0,
+            $"The number of frames to capture is set to {NumFramesToCapture}, but it must be greater than 0"
+        );
+
+        string screenCapturePath = Manager.Instance.GetDirectoryFor(DataCapturePaths.ScreenCapture);
+
+        var camera = SetupCameraTestWithMaterial(8, GraphicsFormat.R8G8B8A8_UNorm, new Vector3(0.0f, 0.0f, 500.5f));
+        var logger = new Unity.Simulation.Logger("DataCapture", suffixOption: LoggerSuffixOption.TIME_STAMP);
+        var wrappers = new List<AsyncRequestWrapper>();
+        var timer = new Stopwatch();
+
+        yield return null;
+        timer.Start();
+
+        Debug.Log($"Rendering and capturing {NumFramesToCapture} frames ...");
+
+        // Render the frame and capture them.
+        for (int i = 0; i < NumFramesToCapture; ++i)
+        {
+            wrappers.Add(CaptureFrameWithLog(camera, logger, screenCapturePath, "image", i));
+            camera.Render();
+
+            yield return null;
+        }
+
+        Debug.Log("Waiting for captures to complete ...");
+
+        bool allCompleted = false;
+
+        // Wait for the tasks to complete.
+        while(timer.Elapsed.TotalSeconds < RequestTimeoutInSeconds)
+        {
+            // This has to a manual polling loop so we can yield, allowing async requests to complete.
+            // Attempting to block the thread here will prevent the requests from progressing.
+            yield return null;
+
+            // The default assumption is that all requests have completed.
+            allCompleted = true;
+
+            foreach (var wrapper in wrappers)
+            {
+                if (!wrapper.Request.completed)
+                {
+                    // We don't need to check the remainder of the requests if we
+                    // encounter one that has not finished running.
+                    allCompleted = false;
+                    break;
+                }
+            }
+
+            if (allCompleted)
+            {
+                // All requests have been completed, so we can proceed. 
+                break;
+            }
+        }
+
+        Assert.IsTrue(allCompleted, "Timed out waiting for capture requests to complete");
+        Debug.Log($"Time (in seconds) to complete all {NumFramesToCapture} capture requests: {timer.Elapsed.TotalSeconds}");
+
+        // Check for errors that may have occured during the capture requests.
+        foreach (var wrapper in wrappers)
+        {
+            Assert.IsFalse(wrapper.Request.error, $"Frame capture request ({wrapper.FrameIndex}) encountered an error");
+            yield return null;
+        }
+
+        // Flush the log to disk.
+        logger.Flushall();
+
+        // This yield must be here so the log is actually written to disk.
+        yield return null;
+
+        // Read the full contents of the log file.
+        string[] fileLines = File.ReadAllLines(logger.GetPath());
+        int expectedImageIndex = 0;
+
+        Debug.Log($"Validating log entries ...");
+
+        // Inspect the lines of the log to make sure each one matches the expected image file.
+        foreach(string line in fileLines)
+        {
+            // Decode the json, then extract the image index that was logged for this line.
+            var data = JsonUtility.FromJson<CaptureFrameWithLogDataPoint>(line);
+            int imageIndex = int.Parse(data.imageName.Split('_')[1]);
+
+            Assert.AreEqual(
+                expectedImageIndex,
+                imageIndex,
+                $"Capture log line ({expectedImageIndex}) references incorrect image: {data.imageName}"
+            );
+
+            ++expectedImageIndex;
+
+            yield return null;
+        }
+
+        Assert.AreEqual(
+            NumFramesToCapture,
+            expectedImageIndex,
+            $"Log contained {expectedImageIndex} lines, but expected: {NumFramesToCapture}"
+        );
     }
 }

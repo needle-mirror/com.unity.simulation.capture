@@ -2,23 +2,26 @@ using System;
 using System.IO;
 
 using UnityEngine;
+using Unity.Profiling;
 using UnityEngine.Experimental.Rendering;
 
 namespace Unity.Simulation
 {
     public static class CaptureImageEncoder
     {
+        static ProfilerMarker s_Encode = new ProfilerMarker("Capture (image encode)");
+
         /// <summary>
         /// An enum describing the image format
         /// </summary>
         public enum ImageFormat
         {
             Jpg,
-            Tga,
             Raw,
 #if UNITY_2019_3_OR_NEWER
             Png,
             Exr,
+            Tga,
 #endif
         }
 
@@ -70,26 +73,29 @@ namespace Unity.Simulation
         /// <exception cref="NotSupportedException"></exception>
         public static Array EncodeArray(Array data, int width, int height, GraphicsFormat format, ImageFormat imageFormat, int additionalParam = 0)
         {
-            switch (imageFormat)
+            using (s_Encode.Auto())
             {
-                case ImageFormat.Raw:
-                    return data;
+                switch (imageFormat)
+                {
+                    case ImageFormat.Raw:
+                        return data;
 #if UNITY_2019_3_OR_NEWER
-                case ImageFormat.Png:
-                    return ImageConversion.EncodeArrayToPNG(data, format, (uint)width, (uint)height, 0);
-                case ImageFormat.Exr:
-                    return ImageConversion.EncodeArrayToEXR(data, format, (uint)width, (uint)height, 0, /*EXRFlags*/(Texture2D.EXRFlags)additionalParam);
-                case ImageFormat.Tga:
-                    return ImageConversion.EncodeArrayToTGA(data, format, (uint)width, (uint)height, 0);
+                    case ImageFormat.Png:
+                        return ImageConversion.EncodeArrayToPNG(data, format, (uint)width, (uint)height, 0);
+                    case ImageFormat.Exr:
+                        return ImageConversion.EncodeArrayToEXR(data, format, (uint)width, (uint)height, 0, /*EXRFlags*/(Texture2D.EXRFlags)additionalParam);
+                    case ImageFormat.Tga:
+                        return ImageConversion.EncodeArrayToTGA(data, format, (uint)width, (uint)height, 0);
 #endif
-                case ImageFormat.Jpg:
-#if USIM_USE_BUILTIN_JPG_ENCODER
-                    return ImageConversion.EncodeArrayToJPG(data, format, (uint)width, (uint)height, 0, /*quality*/additionalParam > 0 ? (int)additionalParam : 75);
+                    case ImageFormat.Jpg:
+#if USIM_USE_BUILTIN_JPG_ENCODER && UNITY_2019_3_OR_NEWER
+                        return ImageConversion.EncodeArrayToJPG(data, format, (uint)width, (uint)height, 0, /*quality*/additionalParam > 0 ? (int)additionalParam : 75);
 #else
-                    return JpegEncoder.Encode(ArrayUtilities.Cast<byte>(data), width, height, GraphicsUtilities.GetBlockSize(format), format, /*quality*/additionalParam > 0 ? (int)additionalParam : 75);
+                        return JpegEncoder.Encode(ArrayUtilities.Cast<byte>(data), width, height, GraphicsUtilities.GetBlockSize(format), format, /*quality*/additionalParam > 0 ? (int)additionalParam : 75);
 #endif
-                default:
-                    throw new NotSupportedException("ImageFormat is not supported");
+                    default:
+                        throw new NotSupportedException("ImageFormat is not supported");
+                }
             }
         }
     }

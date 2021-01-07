@@ -25,7 +25,7 @@ namespace Unity.Simulation
                 var result = FileProducer.Write(path, r.data.colorBuffer as Array);
                 return result ? AsyncRequest<CaptureCamera.CaptureState>.Result.Completed : AsyncRequest<CaptureCamera.CaptureState>.Result.Error;
             };
-            CaptureCamera.Capture(sourceCamera, functor);
+            CaptureCamera.Capture(sourceCamera, functor, forceFlip: ForceFlip.None);
         }
     }
 }

@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
+using System.Runtime.InteropServices;
 
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -8,11 +10,35 @@ using UnityEngine.Experimental.Rendering;
 namespace Unity.Simulation
 {
     /// <summary>
+    /// Enum for overriding the internal check to determine if the image should be flipped.
+    /// Can be used on a per channel basis, or for all channels.
+    /// </summary>
+    [Flags]
+    public enum ForceFlip
+    {
+        None,
+        Color  = (1 << 0),
+        Depth  = (1 << 1),
+        Motion = (1 << 2),
+        All    = Color | Depth | Motion,
+    }
+
+    /// <summary>
     /// Capture class for cameras. Supports Color, Depth, MotionVectors.
     /// Captures supported channels to file system and notifies Manager.
     /// </summary>
     public static class CaptureCamera
     {
+        /// <summary>
+        /// Invoked when a request has completed reading back data for a channel.
+        /// </summary>
+        public delegate void ReadbackCompletionDelegate(AsyncRequest<CaptureState> request, Channel channel, RenderTexture rt, byte[] data);
+
+        /// <summary>
+        /// Invoked when a request has completed readback of all channels.
+        /// </summary>
+        public delegate AsyncRequest.Result RequestCompletionDelegate(AsyncRequest<CaptureState> request);
+
         /// <summary>
         /// Enumeration for the supported channels.
         /// </summary>
@@ -29,7 +55,11 @@ namespace Unity.Simulation
             /// <summary>
             /// Enumeration value specifying the motion vectors channel.
             /// </summary>
-            Motion
+            Motion,
+            /// <summary>
+            /// Enumeration value specifying the max number of channels.
+            /// </summary>
+            Max
         }
 
         /// <summary>
@@ -37,6 +67,10 @@ namespace Unity.Simulation
         /// </summary>
         public struct CaptureState
         {
+            /// <summary>
+            /// </summary>
+            public Camera camera;
+
             /// <summary>
             /// While in flight, references the source buffer to read from.
             /// When completed, references the captured data in Array form.
@@ -53,25 +87,7 @@ namespace Unity.Simulation
             /// While in flight, references the source buffer to read from.
             /// When completed, references the captured data in Array form.
             /// </summary>
-            public object motionVectorsBuffer;
-
-            /// <summary>
-            /// Completion function for handling capture results. Invoked once the capture data is ready.
-            /// The handler is responsible for persisting the data. Once invoked, the data is discarded.
-            /// </summary>
-            public Func<AsyncRequest<CaptureState>, AsyncRequest<CaptureState>.Result> colorFunctor;
-
-            /// <summary>
-            /// Completion function for handling capture results. Invoked once the capture data is ready.
-            /// The handler is responsible for persisting the data. Once invoked, the data is discarded.
-            /// </summary>
-            public Func<AsyncRequest<CaptureState>, AsyncRequest<CaptureState>.Result> depthFunctor;
-
-            /// <summary>
-            /// Completion function for handling capture results. Invoked once the capture data is ready.
-            /// The handler is responsible for persisting the data. Once invoked, the data is discarded.
-            /// </summary>
-            public Func<AsyncRequest<CaptureState>, AsyncRequest<CaptureState>.Result> motionVectorsFunctor;
+            public object motionBuffer;
 
             /// <summary>
             /// Helper method to set the buffer for a specified channel.
@@ -84,10 +100,28 @@ namespace Unity.Simulation
                 {
                     case Channel.Color:  colorBuffer = buffer; break;
                     case Channel.Depth:  depthBuffer = buffer; break;
-                    case Channel.Motion: motionVectorsBuffer = buffer; break;
+                    case Channel.Motion: motionBuffer = buffer; break;
                     default: throw new ArgumentException("CaptureState.SetBuffer invalid channel.");
                 }
             }
+
+            /// <summary>
+            /// Completion function for handling capture results. Invoked once the capture data is ready.
+            /// The handler is responsible for persisting the data. Once invoked, the data is discarded.
+            /// </summary>
+            public Func<AsyncRequest<CaptureState>, AsyncRequest.Result> colorFunctor;
+
+            /// <summary>
+            /// Completion function for handling capture results. Invoked once the capture data is ready.
+            /// The handler is responsible for persisting the data. Once invoked, the data is discarded.
+            /// </summary>
+            public Func<AsyncRequest<CaptureState>, AsyncRequest.Result> depthFunctor;
+
+            /// <summary>
+            /// Completion function for handling capture results. Invoked once the capture data is ready.
+            /// The handler is responsible for persisting the data. Once invoked, the data is discarded.
+            /// </summary>
+            public Func<AsyncRequest<CaptureState>, AsyncRequest.Result> motionFunctor;
 
             /// <summary>
             /// Helper method to set the completion functor for a specified channel.
@@ -95,27 +129,84 @@ namespace Unity.Simulation
             /// <param name="channel">Enumeration value for which channel you are specifying.</param>
             /// <param name="functor">Completion functor for handling the captured data when available.</param>
             /// <returns>The previous completion functor.</returns>
-            public Func<AsyncRequest<CaptureState>, AsyncRequest<CaptureState>.Result> SetFunctor(Channel channel, Func<AsyncRequest<CaptureState>, AsyncRequest<CaptureState>.Result> functor)
+            public Func<AsyncRequest<CaptureState>, AsyncRequest.Result> SetFunctor(Channel channel, Func<AsyncRequest<CaptureState>, AsyncRequest.Result> functor)
             {
-                Func<AsyncRequest<CaptureState>, AsyncRequest<CaptureState>.Result> previous = null;
+                Func<AsyncRequest<CaptureState>, AsyncRequest.Result> previous = null;
                 switch (channel)
                 {
                     case Channel.Color:  previous = colorFunctor; colorFunctor = functor; break;
                     case Channel.Depth:  previous = depthFunctor; depthFunctor = functor; break;
-                    case Channel.Motion: previous = motionVectorsFunctor; motionVectorsFunctor = functor; break;
+                    case Channel.Motion: previous = motionFunctor; motionFunctor = functor; break;
                     default: throw new ArgumentException("CaptureState.SetFunctor invalid channel.");
                 }
                 return previous;
             }
+
+            /// <summary>
+            /// Action to populate the command buffer to readback a color target.
+            /// </summary>
+            public Action<CommandBuffer, RenderTargetIdentifier> colorTrigger;
+
+            /// <summary>
+            /// Action to populate the command buffer to readback a depth target.
+            /// </summary>
+            public Action<CommandBuffer, RenderTargetIdentifier> depthTrigger;
+
+            /// <summary>
+            /// Action to populate the command buffer to readback a motion target.
+            /// </summary>
+            public Action<CommandBuffer, RenderTargetIdentifier> motionTrigger;
+
+            /// <summary>
+            /// Help method to set the command buffer to use, for the specified channel.
+            /// </summary>
+            /// <param name="channel">Enumeration value for which channel you are specifying.</param>
+            /// <param name="action">Action to populate the command buffer.</param>
+            public Action<CommandBuffer, RenderTargetIdentifier> SetTrigger(Channel channel, Action<CommandBuffer, RenderTargetIdentifier> action)
+            {
+                Action<CommandBuffer, RenderTargetIdentifier> previous = null;
+                switch (channel)
+                {
+                    case Channel.Color:  previous = this.colorTrigger; this.colorTrigger  = action; break;
+                    case Channel.Depth:  previous = this.depthTrigger; this.depthTrigger  = action; break;
+                    case Channel.Motion: previous = this.motionTrigger; this.motionTrigger = action; break;
+                    default: throw new InvalidOperationException();
+                }
+                return previous;
+            }
+
+            /// <summary>
+            /// Help method to get the completion functor for the specified channel.
+            /// </summary>
+            /// <param name="channel">Enumeration value for which channel you are specifying.</param>
+            public Func<AsyncRequest<CaptureState>, AsyncRequest.Result> GetFunctor(Channel channel)
+            {
+                switch (channel)
+                {
+                    case Channel.Color:  return colorFunctor;
+                    case Channel.Depth:  return depthFunctor;
+                    case Channel.Motion: return motionFunctor;
+                    default: throw new ArgumentException("CaptureState.SetFunctor invalid channel.");
+                }
+            } 
         }
 
         [RuntimeInitializeOnLoadMethod]
-        public static void ResetAsyncRequestOptionsOnShutdown()
+        static void Notifications()
         {
-            Manager.Instance.ShutdownNotification += () => { AsyncRequest.maxAsyncRequestFrameAge = 0; };
+            Manager.Instance.StartNotification += () =>
+            {
+                SetupMaterials();
+            };
+
+            Manager.Instance.ShutdownNotification += () =>
+            {
+                CommandBuffer cb;
+                while (_commandBufferPool.TryDequeue(out cb))
+                    cb.Dispose();
+            };
         }
 
-#if UNITY_2019_3_OR_NEWER
         /// <summary>
         /// Support for Scriptable Render Pipeline.
         /// SRP works a little differently, this abstraction allows for custom capture options when using SRP.
@@ -123,7 +214,6 @@ namespace Unity.Simulation
         /// You can provide your own implementation of QueueCameraRequest, and dispatch that when appropriate.
         /// </summary>
         public static SRPSupport SRPSupport;
-#endif // UNITY_2019_3_OR_NEWER
 
         /// <summary>
         /// Property for determining whether or not a scriptable render pipeline is enabled or not.
@@ -141,47 +231,19 @@ namespace Unity.Simulation
             }
         }
 
-        static Dictionary<Camera, Dictionary<CameraEvent, CommandBuffer>> _buffers = new Dictionary<Camera, Dictionary<CameraEvent, CommandBuffer>>();
+        static ConcurrentQueue<CommandBuffer> _commandBufferPool = new ConcurrentQueue<CommandBuffer>();
 
-        /// <summary>
-        /// Stop tracking a camera and remove any command buffers associated with it.
-        /// </summary>
-        /// <param name="camera">Camera that you wish to remove any active command buffers from.</param>
-        public static void ForgetCamera(Camera camera)
-        {
-            if (_buffers.ContainsKey(camera))
-            {
-                var events = _buffers[camera];
-                foreach (var e in events)
-                {
-                    camera.RemoveCommandBuffer(e.Key, e.Value);
-                    e.Value.Dispose();
-                }
-                _buffers.Remove(camera);
-            }
-        }
+        static Vector2 _invertVec2d = new Vector2(1, -1);
 
-        static CommandBuffer GetCommandBufferForCamera(CameraEvent e, Camera camera)
+        static CameraEvent[] _cameraEvents = new CameraEvent[]
         {
-            Dictionary<CameraEvent, CommandBuffer> events = null;
-            if (!_buffers.ContainsKey(camera))
-                events = _buffers[camera] = new Dictionary<CameraEvent, CommandBuffer>();
-            else
-                events = _buffers[camera];
-            Debug.Assert(events != null, "GetCommandBufferForCamera failed to get camera events array.");
-            CommandBuffer cb = null;
-            if (!events.ContainsKey(e))
-            {
-                cb = events[e] = new CommandBuffer();
-                camera.AddCommandBuffer(e, cb);
-            }
-            else
-            {
-                cb = events[e];
-                cb.Clear();
-            }
-            return cb;
-        }
+            CameraEvent.AfterEverything,
+            CameraEvent.AfterDepthTexture,
+            CameraEvent.BeforeImageEffects,
+        };
+
+        static Material[] _depthMaterials;
+        static Material[] _motionMaterials;
 
         /// <summary>
         /// Captures a camera render and writes out the color channel to a file.
@@ -233,13 +295,11 @@ namespace Unity.Simulation
         {
             Debug.Assert(camera != null, "CaptureColorAndDepthToFile camera cannot be null");
 
-            Func<AsyncRequest<CaptureState>, AsyncRequest<CaptureState>.Result> colorFunctor = null;
-            Func<AsyncRequest<CaptureState>, AsyncRequest<CaptureState>.Result> depthFunctor = null;
+            Func<AsyncRequest<CaptureState>, AsyncRequest.Result> colorFunctor = null;
+            Func<AsyncRequest<CaptureState>, AsyncRequest.Result> depthFunctor = null;
 
             var width  = camera.pixelWidth;
             var height = camera.pixelHeight;
-
-            bool flipY = ShouldFlipY(camera);
 
             if (colorPath != null)
             {
@@ -257,11 +317,11 @@ namespace Unity.Simulation
                 {
                     depthPath = CaptureImageEncoder.EnforceFileExtension(depthPath, depthImageFormat);
                     var result = FileProducer.Write(depthPath, CaptureImageEncoder.EncodeArray(r.data.depthBuffer as Array, width, height, depthFormat, depthImageFormat));
-                    return result ? AsyncRequest<CaptureState>.Result.Completed : AsyncRequest<CaptureState>.Result.Error;
+                    return result ? AsyncRequest.Result.Completed : AsyncRequest.Result.Error;
                 };
             }
 
-            return Capture(camera, colorFunctor, colorFormat, depthFunctor, depthFormat, flipY: flipY);
+            return Capture(camera, colorFunctor, colorFormat, depthFunctor, depthFormat, forceFlip: ForceFlip.None);
         }
 
         /// <summary>
@@ -272,25 +332,54 @@ namespace Unity.Simulation
         /// <param name="colorFormat"> The pixel format to capture in. </param>
         /// <param name="depthFunctor"> Completion functor for the depth channel. </param>
         /// <param name="depthFormat"> The pixel format to capture in. </param>
-        /// <param name="motionVectorsFunctor"> Completion functor for the motion vectors channel. </param>
+        /// <param name="motionFunctor"> Completion functor for the motion vectors channel. </param>
         /// <param name="motionFormat"> The pixel format to capture in. </param>
         /// <param name="flipY"> Whether or not to flip the image vertically. </param>
         /// <returns>AsyncRequest&lt;CaptureState&gt;</returns>
         public static AsyncRequest<CaptureState> Capture
         (
             Camera camera,
-            Func<AsyncRequest<CaptureState>, AsyncRequest<CaptureState>.Result> colorFunctor = null,
+            Func<AsyncRequest<CaptureState>, AsyncRequest.Result> colorFunctor = null,
             GraphicsFormat colorFormat = GraphicsFormat.R8G8B8A8_UNorm, 
-            Func<AsyncRequest<CaptureState>, AsyncRequest<CaptureState>.Result> depthFunctor = null,
+            Func<AsyncRequest<CaptureState>, AsyncRequest.Result> depthFunctor = null,
             GraphicsFormat depthFormat = GraphicsFormat.R16_UNorm,
-            Func<AsyncRequest<CaptureState>, AsyncRequest<CaptureState>.Result> motionVectorsFunctor = null,
+            Func<AsyncRequest<CaptureState>, AsyncRequest.Result> motionFunctor = null,
             GraphicsFormat motionFormat = GraphicsFormat.R16_UNorm,
             bool flipY = false
         )
         {
+            return Capture(camera, colorFunctor, colorFormat, depthFunctor, depthFormat, motionFunctor, motionFormat, flipY ? ForceFlip.All : ForceFlip.None);
+        }
+
+        /// <summary>
+        /// Main Capture entrypoint. 
+        /// </summary>
+        /// <param name="camera"> The Camera to capture data from. </param>
+        /// <param name="colorFunctor"> Completion functor for the color channel. </param>
+        /// <param name="colorFormat"> The pixel format to capture in. </param>
+        /// <param name="depthFunctor"> Completion functor for the depth channel. </param>
+        /// <param name="depthFormat"> The pixel format to capture in. </param>
+        /// <param name="motionFunctor"> Completion functor for the motion vectors channel. </param>
+        /// <param name="motionFormat"> The pixel format to capture in. </param>
+        /// <param name="forceFlipY"> Override one ore more channels to force flip either true or false. </param>
+        /// <param name="readWrite"> Specify the desired color space conversion. If Default, then will be set to sRGB for SRP Color channel. </param>
+        /// <returns>AsyncRequest&lt;CaptureState&gt;</returns>
+        public static AsyncRequest<CaptureState> Capture
+        (
+            Camera camera,
+            Func<AsyncRequest<CaptureState>, AsyncRequest.Result> colorFunctor = null,
+            GraphicsFormat colorFormat = GraphicsFormat.R8G8B8A8_UNorm, 
+            Func<AsyncRequest<CaptureState>, AsyncRequest.Result> depthFunctor = null,
+            GraphicsFormat depthFormat = GraphicsFormat.R16_UNorm,
+            Func<AsyncRequest<CaptureState>, AsyncRequest.Result> motionFunctor = null,
+            GraphicsFormat motionFormat = GraphicsFormat.R16_UNorm,
+            ForceFlip forceFlip = ForceFlip.None,
+            RenderTextureReadWrite readWrite = RenderTextureReadWrite.Default
+        )
+        {
 #if UNITY_EDITOR
             Debug.Assert(camera != null, "Capture camera cannot be null.");
-            Debug.Assert(colorFunctor != null || depthFunctor != null || motionVectorsFunctor != null, "Capture one functor must be valid.");
+            Debug.Assert(colorFunctor != null || depthFunctor != null || motionFunctor != null, "Capture one functor must be valid.");
 
             if (colorFunctor != null)
             {
@@ -301,354 +390,362 @@ namespace Unity.Simulation
             {
                 Debug.Assert((camera.depthTextureMode & (DepthTextureMode.Depth | DepthTextureMode.DepthNormals)) != 0, "Depth not specified for camera");
                 Debug.Assert(GraphicsUtilities.SupportsRenderTextureFormat(depthFormat), "GraphicsFormat not supported");
+#if URP_ENABLED
+                Debug.Assert(SRPSupport.URPRendererFeatureAdded, "Unity Simulation URPCaptureRendererFeature has not been added to the scriptable renderer.");
+                Debug.Assert(SRPSupport.URPCameraDepthEnabled, "Depth is not enabled in the URP render pipeline asset.");
+#endif
             }
 
-            if (motionVectorsFunctor != null)
+            if (motionFunctor != null)
             {
                 Debug.Assert((camera.depthTextureMode & DepthTextureMode.MotionVectors) != 0, "Motion vectors not enabled in depthTextureMode");
                 Debug.Assert(SystemInfo.supportsMotionVectors, "Motion vectors are not supported");
                 Debug.Assert(GraphicsUtilities.SupportsRenderTextureFormat(motionFormat), "GraphicsFormat not supported");
             }
 #endif // UNITY_EDITOR
-            var req = Manager.Instance.CreateRequest<AsyncRequest<CaptureState>>();
 
-            SetupCaptureRequest(req, Channel.Color,  camera, CameraEvent.AfterEverything,    BuiltinRenderTextureType.CameraTarget,  colorFormat,  colorFunctor,         flipY);
-            SetupCaptureRequest(req, Channel.Depth,  camera, CameraEvent.AfterDepthTexture,  BuiltinRenderTextureType.Depth,         depthFormat,  depthFunctor,         flipY);
-            SetupCaptureRequest(req, Channel.Motion, camera, CameraEvent.BeforeImageEffects, BuiltinRenderTextureType.MotionVectors, motionFormat, motionVectorsFunctor, flipY);
+            var request = Manager.Instance.CreateRequest<AsyncRequest<CaptureState>>();
+
+            if (colorFunctor != null)
+                SetupCaptureRequest(request, Channel.Color,  camera, colorFormat,  colorFunctor,  forceFlip, readWrite);
+            if (depthFunctor != null)
+                SetupCaptureRequest(request, Channel.Depth,  camera, depthFormat,  depthFunctor,  forceFlip, readWrite);
+            if (motionFunctor != null)
+                SetupCaptureRequest(request, Channel.Motion, camera, motionFormat, motionFunctor, forceFlip, readWrite);
 
 #if UNITY_2019_3_OR_NEWER
-            SRPSupport?.QueueCameraRequest(camera, req);
+            if (scriptableRenderPipeline)
+                SRPSupport?.QueueCameraRequest(camera, request);
 #endif
-
-            return req;
+            return request;
         }
-
-        static void SetupCaptureRequest
-        (
-            AsyncRequest<CaptureState> req,
-            Channel channel,
-            Camera camera,
-            CameraEvent cameraEvent,
-            BuiltinRenderTextureType source,
-            GraphicsFormat format,
-            Func<AsyncRequest<CaptureState>, AsyncRequest<CaptureState>.Result> functor,
-            bool flipY
-        )
-        {
-            if (functor != null)
-            {
-                // declared for possible capture, to avoid use from other threads.
-                var cameraTargetTexture = camera.targetTexture;
-
-                RenderTexture target1 = null;
-                RenderTexture target2 = null;
-
-                Action ReleaseTargets = () =>
-                {
-                    if (target1 != null && target1 != cameraTargetTexture)
-                    {
-                        RenderTexture.ReleaseTemporary(target1);
-                        target1 = null;
-                    }
-                    if (target2 != null)
-                    {
-                        Debug.Assert(target2 != cameraTargetTexture);
-                        RenderTexture.ReleaseTemporary(target2);
-                        target2 = null;
-                    }
-                };
-
-                Material depthMaterial = null;
-                if (source == BuiltinRenderTextureType.Depth)
-                    depthMaterial = SelectDepthShaderVariant(format);
-
-#if UNITY_2019_3_OR_NEWER
-                if (scriptableRenderPipeline)
-                {
-                    if (CaptureOptions.useBatchReadback)
-                    {
-                        QueueForAsyncBatchReadback(req, channel, functor, SetupRenderTargets(ref target1, ref target2, camera, null, format, cameraTargetTexture, depthMaterial, flipY));
-                    }
-                    else
-                    {
-                        req.data.SetFunctor(channel, (AsyncRequest<CaptureState> r) =>
-                        {
-                            var target = SetupRenderTargets(ref target1, ref target2, camera, null, format, cameraTargetTexture, depthMaterial, flipY);
-                            if (GraphicsUtilities.SupportsAsyncReadback())
-                            {
-                                AsyncGPUReadback.Request(target, 0, (AsyncGPUReadbackRequest request) =>
-                                {
-                                    ReleaseTargets();
-                                    if (request.hasError)
-                                        req.error = true;
-                                    else
-                                    {
-                                        if (functor != null)
-                                        {
-                                            req.data.SetBuffer(channel, request.GetData<byte>().ToArray());
-                                            req.Enqueue(functor);
-                                            req.Execute();
-                                        }
-                                    }
-                                });
-                            }
-                            else
-                            {
-                                r.data.SetBuffer(channel, GraphicsUtilities.GetPixelsSlow(target));
-                                ReleaseTargets();
-                                req.Enqueue(functor);
-                                req.Execute();
-                            }
-                            return AsyncRequest.Result.None;
-                        });
-                    }
-                }
-                else
-#endif // UNITY_2019_3_OR_NEWER
-                {
-                    req.data.SetFunctor(channel, functor);
-
-                    CommandBuffer commandBuffer = GetCommandBufferForCamera(cameraEvent, camera);
-                    commandBuffer.name = $"CaptureCamera.{channel.ToString()}";
-
-                    var target = SetupRenderTargets(ref target1, ref target2, camera, commandBuffer, format, cameraTargetTexture, depthMaterial, flipY);
-
-                    if (GraphicsUtilities.SupportsAsyncReadback())
-                    {
-                        #if UNITY_2019_3_OR_NEWER
-                        if (CaptureOptions.useBatchReadback)
-                        {
-                            QueueForAsyncBatchReadback(req, channel, functor, target);
-                            ReleaseTargets();
-                        }
-                        else
-                        #endif
-                        {
-                            commandBuffer.RequestAsyncReadback(target, (AsyncGPUReadbackRequest request) =>
-                            {
-                                commandBuffer.Clear();
-                                if (request.hasError)
-                                    req.error = true;
-                                else
-                                {
-                                    functor = req.data.SetFunctor(channel, null);
-                                    if (functor != null)
-                                    {
-                                        req.data.SetBuffer(channel, request.GetData<byte>().ToArray());
-                                        req.Enqueue(functor);
-                                        req.Execute();
-                                    }
-                                }
-                                ReleaseTargets();
-                            });
-                        }
-                    }
-                    else
-                    {
-                        Func<AsyncRequest<CaptureState>, AsyncRequest<CaptureState>.Result> wrapper;
-#if UNITY_2019_3_OR_NEWER
-                        if (CaptureOptions.useBatchReadback)
-                        {
-                            wrapper = (AsyncRequest<CaptureState> r) =>
-                            {
-                                BatchReadback.Instance().QueueReadback(target, data =>
-                                {
-                                    r.data.SetBuffer(channel, data);
-                                    ReleaseTargets();
-                                    r.Enqueue(functor);
-                                    r.Execute();
-                                    return AsyncRequest.Result.Completed;
-                                });
-                                return AsyncRequest.Result.Completed;
-                            };
-                        }
-                        else
-#endif // UNITY_2019_3_OR_NEWER
-                        {
-                            wrapper = (AsyncRequest<CaptureState> r) =>
-                            {
-                                r.data.SetBuffer(channel, GraphicsUtilities.GetPixelsSlow(target));
-                                ReleaseTargets();
-                                r.Enqueue(functor);
-                                r.Execute();
-                                return AsyncRequest.Result.Completed;
-                            };
-                        }
-                        req.Enqueue(wrapper);
-                        req.Execute(AsyncRequest.ExecutionContext.EndOfFrame);
-                    }
-                }
-            }
-        }
-        
-#if UNITY_2019_3_OR_NEWER
-        static void QueueForAsyncBatchReadback(AsyncRequest<CaptureState> req,
-            Channel channel,
-            Func<AsyncRequest<CaptureState>, AsyncRequest.Result> functor,
-            RenderTexture target)
-        {
-            Func<AsyncRequest<CaptureState>, AsyncRequest<CaptureState>.Result> wrapper;
-            wrapper = (AsyncRequest<CaptureState> r) =>
-            {
-                BatchReadback.Instance().QueueReadback(target, bytes =>
-                {
-                    if (functor != null)
-                    {
-                        r.data.SetBuffer(channel, bytes);
-                        r.Enqueue(functor);
-                        r.Execute();
-                    }
-
-                    return AsyncRequest.Result.Completed;
-                });
-                return AsyncRequest.Result.Completed;
-            };
-            
-            req.Enqueue(wrapper);
-            req.Execute(AsyncRequest.ExecutionContext.EndOfFrame);
-        }
-#endif
-
 
         /// <summary>
-        /// Check if for the given rendering pipeline and GfxAPI there is a need to flip Y during the readback from the backbuffer.
+        /// Setup a capture request for a channel. Once completed, the functor will be called with the channel data, in the format requested.
         /// </summary>
-        /// <param name="camera">Camera from which the readback is being performed.</param>
-        /// <returns>A boolean indicating if the flip is required.</returns>
-        public static bool ShouldFlipY(Camera camera)
-        {
-#if UNITY_2019_3_OR_NEWER
-            if (SRPSupport != null)
-            {
-                switch (SRPSupport.GetCurrentPipelineRenderingType())
-                {
-#if URP_ENABLED
-                    case RenderingPipelineType.URP:
-                    {
-#if !PLATFORM_CLOUD_RENDERING
-                        return (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Direct3D11 || SystemInfo.graphicsDeviceType == GraphicsDeviceType.Metal) &&
-                               (camera.targetTexture == null && camera.cameraType == CameraType.Game);
-#endif
-                        goto default;
-
-                    }
-#endif
-#if HDRP_ENABLED
-                    case RenderingPipelineType.HDRP:
-                    {
-                        var hdAdditionalCameraData = camera.gameObject.GetComponent<UnityEngine.Rendering.HighDefinition.HDAdditionalCameraData>();
-                        //Based on logic in HDRenderPipeline.PrepareFinalBlitParameters
-                        return camera.targetTexture != null ||
-                                hdAdditionalCameraData.flipYMode == UnityEngine.Rendering.HighDefinition.HDAdditionalCameraData.FlipYMode.ForceFlipY ||
-                                camera.cameraType == CameraType.Game;
-                    }
-#endif
-                    default:
-                    {
-                        return camera.targetTexture == null && GraphicsUtilities.SupportsAsyncReadback();
-                    }
-                }
-            }
-#endif
-            return camera.targetTexture == null && GraphicsUtilities.SupportsAsyncReadback();
-        }
-
-        static RenderTexture SetupRenderTargets
+        /// <param name="request"> AsyncRequest to enqueue readbacks to. When all are completed, the request is marked completed. </param>
+        /// <param name="channel"> The channel to capture data from (color, depth etc.) </param>
+        /// <param name="camera"> The Camera to capture data from. </param>
+        /// <param name="format"> The graphics format you want the data to be in. </param>
+        /// <param name="functor"> The completion functor to call with the data. </param>
+        /// <param name="forceFlipY"> Flags allowing you to force flipY for arbitrary channels. </param>
+        /// <param name="readWrite"> Specify the desired color space conversion. If Default, then will be set to sRGB for SRP Color channel. </param>
+        public static void SetupCaptureRequest
         (
-            ref RenderTexture target1,
-            ref RenderTexture target2,
+            AsyncRequest<CaptureState> request,
+            Channel channel,
             Camera camera,
-            CommandBuffer commandBuffer,
             GraphicsFormat format,
-            RenderTexture cameraTargetTexture,
-            Material depthMaterial,
-            bool flipY
+            Func<AsyncRequest<CaptureState>, AsyncRequest.Result> functor,
+            ForceFlip forceFlipY,
+            RenderTextureReadWrite readWrite = RenderTextureReadWrite.Default
         )
         {
-            if (cameraTargetTexture == null || depthMaterial != null)
-            {
-                target1 = RenderTexture.GetTemporary(camera.pixelWidth, camera.pixelHeight, 0);
-                Blit(commandBuffer, cameraTargetTexture, target1, depthMaterial);
-            }
+            request.data.camera = camera;
+            request.data.SetFunctor(channel, functor);
+
+            var material = SelectShaderVariantForChannel(channel, format);
+
+            if (scriptableRenderPipeline)
+                request.data.SetTrigger(channel, (cb, rtid) => SetupCaptureRequestCommandBufferForChannel(request, channel, camera, cb, rtid, material, format, forceFlipY, readWrite, HandleReadbackCompletion));
             else
+                SetupCaptureRequestCommandBufferForChannel(request, channel, camera, null, default, material, format, forceFlipY, readWrite, HandleReadbackCompletion);
+        }
+
+        /// <summary>
+        /// Setup a CommandBuffer for capturing from a channel.
+        /// </summary>
+        /// <param name="request"> AsyncRequest to enqueue readbacks to. When all are completed, the request is marked completed. </param>
+        /// <param name="channel"> The channel to capture data from (color, depth etc.) </param>
+        /// <param name="camera"> The Camera to capture data from. </param>
+        /// <param name="commandBuffer"> The command buffer to populate. If null, a command buffer will be allocated from a pool. </param>
+        /// <param name="rtid"> The render target identifier to capture. If default(RenderTargetIdentifier) then readback will occur from either the Camera.targetTexture or the back buffer. </param>
+        /// <param name="material"> Material to use when blitting. If null, then no blit will occur. Use by depth to copy from depth buffer to color buffer, but could be useful elsewhere as well. </param>
+        /// <param name="format"> The graphics format you want the data to be in. </param>
+        /// <param name="forceFlipY"> Flags allowing you to force flipY for arbitrary channels. </param>
+        /// <param name="readWrite"> Specify the desired color space conversion. If Default, then will be set to sRGB for SRP Color channel. </param>
+        /// <param name="completion"> The completion functor to call with the data. </param>
+        public static void SetupCaptureRequestCommandBufferForChannel(AsyncRequest<CaptureState> request, Channel channel, Camera camera, CommandBuffer commandBuffer, RenderTargetIdentifier rtid, Material material, GraphicsFormat format, ForceFlip forceFlipY, RenderTextureReadWrite readWrite, ReadbackCompletionDelegate completion)
+        {
+            Debug.Assert(ThreadUtility.IsMainThread());
+
+            // Some pipelines need to add commands to their own command buffers before calling us.
+            // In these cases, the command buffer is passed in, otherwise we just create our own.
+            bool usePassedInCommandBuffer  = commandBuffer != null;
+            bool usePassedInRenderTargetId = !Equals(rtid, default(RenderTargetIdentifier));
+
+            // If we were not passed in a command buffer, then we can use one from our pool.
+            if (!usePassedInCommandBuffer)
             {
-                target1 = cameraTargetTexture;
+                if (!_commandBufferPool.TryDequeue(out commandBuffer))
+                    commandBuffer = new CommandBuffer(){ name = $"cb.{channel.ToString()}"};
             }
 
+            if (SRPSupport.GetCurrentPipelineRenderingType() == RenderingPipelineType.BUILTIN)
+            {
+                camera.AddCommandBuffer(_cameraEvents[(int)channel], commandBuffer);
+                commandBuffer.SetRenderTarget(null as RenderTexture);
+            }
+
+            var flipY = ShouldFlipY(camera, channel, forceFlipY, usePassedInRenderTargetId);
+            var rtf   = GraphicsFormatUtility.GetRenderTextureFormat(format);
+
+            // If the passed in readWrite is default, then we assume sRGB if we are using SRP and this is a color channel.
+            readWrite = readWrite == RenderTextureReadWrite.Default && scriptableRenderPipeline && channel == Channel.Color ? RenderTextureReadWrite.sRGB : readWrite;
+            
+            RenderTexture rt = camera.targetTexture, rt1 = null, rt2 = null, rt3 = null, rt4 = null;
+
+            // If we're doing a blit from NULL ("backbuffer") into destination, we'll need to blit once
+            // into a RT, (since we can't sample backbuffer in a shader), and inverting (sourceScale)
+            // is ignored when blitting from the NULL target, due to taking the GrabPass path.
+            if (rt == null && !usePassedInRenderTargetId)
+            {
+                rt1 = RenderTexture.GetTemporary(camera.pixelWidth, camera.pixelHeight, 0, rtf, readWrite);
+                commandBuffer.Blit(null, rt1);
+                rtid = rt = rt1;
+            }
+
+            if (material != null)
+            {
+                var src = usePassedInRenderTargetId ? rtid : rt; usePassedInRenderTargetId = false;
+                rt2 = RenderTexture.GetTemporary(camera.pixelWidth, camera.pixelHeight, 0, rtf, readWrite);
+                commandBuffer.Blit(src, rt2, material);
+                rtid = rt = rt2;
+            }
+
+            // Currently there is no Blit variant that takes a material and a scale, so the flipY always
+            // needs to be separate from any other blits that might occur with a material.
             if (flipY)
             {
-                target2 = RenderTexture.GetTemporary(camera.pixelWidth, camera.pixelHeight, 0, GraphicsFormatUtility.GetRenderTextureFormat(format));
-                Blit(commandBuffer, target1, target2, new Vector2(1, -1), Vector2.up);
+                var src = usePassedInRenderTargetId ? rtid : rt; usePassedInRenderTargetId = false;
+                rt3 = RenderTexture.GetTemporary(camera.pixelWidth, camera.pixelHeight, 0, rtf, readWrite);
+                commandBuffer.Blit(src, rt3, _invertVec2d, Vector2.up);
+                rtid = rt = rt3;
             }
 
-            // order is target2 > target1 > targetTexture
-            return target2 == null ? (target1 == null ?  cameraTargetTexture : target1) : target2;
-        }
+            // Finally, if the pixel format doesn't match the requested format, we copy the texture so that
+            // the color format is corrected (which is done automatically). This really only happens when
+            // we are capturing from a camera with a RT, and we don't need to flip or use a material.
+            if (usePassedInRenderTargetId || !rt.CompareFormat(format))
+            {
+                var src = usePassedInRenderTargetId ? rtid : rt; usePassedInRenderTargetId = false;
+                rt4 = RenderTexture.GetTemporary(camera.pixelWidth, camera.pixelHeight, 0, rtf, readWrite);
+                commandBuffer.Blit(src, rt4);
+                rtid = rt = rt4;
+            }
 
-        static void Blit(CommandBuffer commandBuffer, RenderTexture src, RenderTexture dst, Material material)
-        {
-            if (commandBuffer != null)
+#if UNITY_2019_3_OR_NEWER
+            if (CaptureOptions.useBatchReadback)
             {
-                if (material != null)
-                    commandBuffer.Blit(src, dst, material);
-                else
-                    commandBuffer.Blit(src, dst);
-            }
-            else
-            {
-                if (material != null)
-                    Graphics.Blit(src, dst, material);
-                else
-                    Graphics.Blit(src, dst);
-            }
-        }
-
-        static void Blit(CommandBuffer commandBuffer, RenderTexture src, RenderTexture dst, Vector2 scale, Vector2 offset)
-        {
-            if (commandBuffer != null)
-            {
-                commandBuffer.Blit(src, dst, scale, offset);
-            }
-            else
-            {
-                Graphics.Blit(src, dst, scale, offset);
-            }
-        }
-
-        static Material SelectDepthShaderVariant(GraphicsFormat format)
-        {
-            if (_depthCopyMaterials == null)
-            {
-                _depthCopyMaterials = new Material[4];
-#if HDRP_ENABLED
-                if (SRPSupport.GetCurrentPipelineRenderingType() == RenderingPipelineType.HDRP)
+                Manager.Instance.QueueForEndOfFrame(() =>
                 {
-                    _depthCopyMaterials[0] = new Material(Shader.Find("usim/BlitCopyDepthHDRP"));
-                    _depthCopyMaterials[0].EnableKeyword("HDRP_ENABLED");
-                }
-                else
-#endif // HDRP_ENABLED
-                {
-                    for (var i = 0; i < _depthCopyMaterials.Length; ++i)
+                    if (request.data.GetFunctor(channel) != null)
                     {
-                        _depthCopyMaterials[i] = new Material(Shader.Find("usim/BlitCopyDepth"));
-                        _depthCopyMaterials[i].EnableKeyword($"CHANNELS{i + 1}");
-                    };
+                        completion?.Invoke(request, channel, rt, null);
+
+                        if (SRPSupport.GetCurrentPipelineRenderingType() == RenderingPipelineType.BUILTIN)
+                            camera.RemoveCommandBuffer(_cameraEvents[(int)channel], commandBuffer);
+                        if (!usePassedInCommandBuffer)
+                            RecycleCommandBuffer(commandBuffer);
+                        ReleaseTemporaryTextures(rt1, rt2, rt3, rt4);
+                    }
+                });
+            }
+            else
+#endif
+            if (GraphicsUtilities.SupportsAsyncReadback())
+            {
+                commandBuffer.RequestAsyncReadback(rt, r =>
+                {
+                    if (request.data.GetFunctor(channel) != null)
+                    {
+                        completion?.Invoke(request, channel, rt, r.hasError ? null : r.GetData<byte>().ToArray());
+
+                        if (SRPSupport.GetCurrentPipelineRenderingType() == RenderingPipelineType.BUILTIN)
+                            camera.RemoveCommandBuffer(_cameraEvents[(int)channel], commandBuffer);
+                        if (!usePassedInCommandBuffer)
+                            RecycleCommandBuffer(commandBuffer);
+                        ReleaseTemporaryTextures(rt1, rt2, rt3, rt4);
+                    }
+                });
+            }
+            else
+            {
+                Manager.Instance.QueueForEndOfFrame(() =>
+                {
+                    if (request.data.GetFunctor(channel) != null)
+                    {
+                        completion?.Invoke(request, channel, rt, GraphicsUtilities.GetPixelsSlow(rt));
+
+                        if (SRPSupport.GetCurrentPipelineRenderingType() == RenderingPipelineType.BUILTIN)
+                            camera.RemoveCommandBuffer(_cameraEvents[(int)channel], commandBuffer);
+                        if (!usePassedInCommandBuffer)
+                            RecycleCommandBuffer(commandBuffer);
+                        ReleaseTemporaryTextures(rt1, rt2, rt3, rt4);
+                    }
+                });
+            }
+
+            // If our command buffer wasn't passed to us, and we are not the builtin render pipeline, we can execute.
+            if (!usePassedInCommandBuffer && SRPSupport.GetCurrentPipelineRenderingType() != RenderingPipelineType.BUILTIN)
+                Graphics.ExecuteCommandBuffer(commandBuffer);
+        }
+
+        static void HandleReadbackCompletion(AsyncRequest<CaptureState> request, Channel channel, RenderTexture rt, byte[] data)
+        {
+#if UNITY_2019_3_OR_NEWER
+            if (CaptureOptions.useBatchReadback)
+                BatchReadback.Instance.QueueReadback(request, channel, rt);
+            else
+#endif
+            {
+                request.error = data == null;
+                if (data != null)
+                {
+                    request.data.SetBuffer(channel, data);
+                    request.Enqueue(request.data.GetFunctor(channel));
+                    request.Execute();
+                }
+            }
+            request.data.SetFunctor(channel, null);
+        }
+
+        /// <summary>
+        /// Check if for the given rendering pipeline there is a need to flip Y during readback.
+        /// </summary>
+        /// <param name="camera">Camera from which the readback is being performed.</param>
+        /// <param name="channel">Channel which the readback is being performed for.</param>
+        /// <param name="forceFlipY">Override the default to either force flip or force not flip, or neither.</param>
+        /// <param name="usePassedInRenderTargetId">When we are using a passed in rtid, then we don't need to flip.</param>
+        /// <returns>A boolean indicating if the flip is required.</returns>
+        public static bool ShouldFlipY(Camera camera, Channel channel, ForceFlip forceFlipY, bool usePassedInRenderTargetId)
+        {
+            bool shouldFlipY = false;
+
+            if (forceFlipY != ForceFlip.None)
+            {
+                var mask = 1 << (int)channel;
+                shouldFlipY = ((int)forceFlipY & mask) == mask ? true : false;
+            }
+            else
+            {
+                switch (channel)
+                {
+                    case Channel.Color:
+#if !URP_ENABLED && !HDRP_ENABLED // URP and HDRP always pass in a RenderTargetIdentifier for the color render texture, which never needs flipping.
+                        shouldFlipY = !usePassedInRenderTargetId && camera.targetTexture == null && SystemInfo.graphicsUVStartsAtTop;
+#endif
+                        break;
+                    case Channel.Depth:
+                        break;
+                    case Channel.Motion:
+                        break;
                 }
             }
 
-#if HDRP_ENABLED
-            if (SRPSupport.GetCurrentPipelineRenderingType() == RenderingPipelineType.HDRP)
-                return _depthCopyMaterials[0];
-            else
-#endif // HDRP_ENABLED
+            if (Log.level == Log.Level.Verbose)
             {
-                var componentCount = GraphicsUtilities.GetComponentCount(format);
-                Debug.Assert(componentCount >= 1 && componentCount <= 4);
-                return _depthCopyMaterials[componentCount - 1];
+                var rt    = camera.targetTexture == null ? "null" : camera.targetTexture.ToString();
+                var uv    = SystemInfo.graphicsUVStartsAtTop.ToString();
+                var async = GraphicsUtilities.SupportsAsyncReadback();
+                var ffy   = forceFlipY.ToString();
+                var chan  = channel.ToString();
+                var pipe  = SRPSupport.GetCurrentPipelineRenderingType().ToString();
+                var gfx   = SystemInfo.graphicsDeviceType.ToString();
+
+                Log.V($"ShouldFlipY: {shouldFlipY} <= rt({rt}) uv({uv}) async({async}) ffY({ffy}) chan({chan}) pipe({pipe}) gfx({gfx})");
             }
+
+            return shouldFlipY;
         }
 
-        static Material[] _depthCopyMaterials;
+        static void RecycleCommandBuffer(CommandBuffer commandBuffer)
+        {
+            commandBuffer.Clear();
+            _commandBufferPool.Enqueue(commandBuffer);
+        }
+
+        static void ReleaseTemporaryTextures(RenderTexture rt1, RenderTexture rt2, RenderTexture rt3, RenderTexture rt4)
+        {
+            if (rt1 != null)
+                RenderTexture.ReleaseTemporary(rt1);
+            if (rt2 != null)
+                RenderTexture.ReleaseTemporary(rt2);
+            if (rt3 != null)
+                RenderTexture.ReleaseTemporary(rt3);
+            if (rt4 != null)
+                RenderTexture.ReleaseTemporary(rt4);
+        }
+
+        static void SetupMaterials()
+        {
+            _depthMaterials = new Material[4];
+            switch (SRPSupport.GetCurrentPipelineRenderingType())
+            {
+                case RenderingPipelineType.BUILTIN:
+                    for (var i = 0; i < _depthMaterials.Length; ++i)
+                    {
+                        _depthMaterials[i] = new Material(Shader.Find("usim/BlitCopyDepth"));
+                        _depthMaterials[i].EnableKeyword($"CHANNELS{i + 1}");
+                    };
+                    break;
+
+                case RenderingPipelineType.URP:
+                    goto case RenderingPipelineType.BUILTIN;
+
+                case RenderingPipelineType.HDRP:
+                    _depthMaterials[0] = new Material(Shader.Find("usim/BlitCopyDepthHDRP"));
+                    _depthMaterials[0].EnableKeyword("HDRP_ENABLED");
+                    break;
+
+                default:
+                    throw new InvalidOperationException("Invalid RenderingPipelineType");
+            }
+
+            _motionMaterials = new Material[4];
+            for (var i = 0; i < _motionMaterials.Length; ++i)
+            {
+                _motionMaterials[i] = new Material(Shader.Find("usim/BlitCopyMotion"));
+                _motionMaterials[i].EnableKeyword($"CHANNELS{i + 1}");
+            };
+        }
+
+        public static Material SelectShaderVariantForChannel(Channel channel, GraphicsFormat format)
+        {
+            switch (channel)
+            {
+                case Channel.Color:
+                    break;
+
+                case Channel.Depth:
+                    switch (SRPSupport.GetCurrentPipelineRenderingType())
+                    {
+                        case RenderingPipelineType.BUILTIN:
+                            var componentCount = GraphicsUtilities.GetComponentCount(format);
+                            Debug.Assert(componentCount >= 1 && componentCount <= 4);
+                            Debug.Assert(_depthMaterials[componentCount - 1] != null);
+                            return _depthMaterials[componentCount - 1];
+
+                        case RenderingPipelineType.URP:
+                            goto case RenderingPipelineType.BUILTIN;
+
+                        case RenderingPipelineType.HDRP:
+                            Debug.Assert(_depthMaterials[0] != null);
+                            return _depthMaterials[0];
+
+                        default:
+                            throw new InvalidOperationException("Invalid RenderingPipelineType");
+                    }
+
+                case Channel.Motion:
+                    {
+                        var componentCount = GraphicsUtilities.GetComponentCount(format);
+                        Debug.Assert(componentCount >= 1 && componentCount <= 4);
+                        Debug.Assert(_motionMaterials[componentCount - 1] != null);
+                        return _motionMaterials[componentCount - 1];
+                    }
+            }
+            return null;
+        }
     }
 }

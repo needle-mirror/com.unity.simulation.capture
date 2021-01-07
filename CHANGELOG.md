@@ -1,7 +1,20 @@
 # Changelog
 
+## [0.0.10-preview.16] - 2021-01-07
+
+- CameraGrab and DepthGrab components support an option NameGenerator parameter which can be used to customize the names picked for subsequent captures.
+- CaptureCamera supports per channel force flip flags. The capture pathway has been refactored, and should be auto flipped correctly. These flags allow you to override.
+- Fixed an issue with IL2CPP where the jpg encoder would crash resizing the compressed array to actual size.
+- Fixed an issue reading back single channel textures as R16_UNorm. Values are now properly scaled between 0 and 0xffff inclusive.
+- Added many tests for ensuring correct output, orientation, and depth for all pipelines.
+- Fixed bug on exiting playmode that would not perform the shutdown properly if the player is paused when exiting playmode.
+
+Known Issues
+- Under certain circumstances, having MSAA enabled can cause depth capture to fail.
+
 ## [0.0.10-preview.15] - 2020-10-27
-Adding support for cloud rendering build target starting 2019.4 and above
+
+- Adding support for cloud rendering build target starting 2019.4 and above
 
 ## [0.0.10-preview.14] - 2020-09-28
 
@@ -21,6 +34,7 @@ Adding support for cloud rendering build target starting 2019.4 and above
 - Update dependency to com.unity.simulation.core@0.0.10-preview.19
 
 ## [0.0.10-preview.11] - 2020-08-20
+
 - Fixed Compile issues with 2020.1.
 - Added more test coverage for better stability.
 - Fixed FlipY issues with built-in rendering pipeline.
@@ -28,6 +42,7 @@ Adding support for cloud rendering build target starting 2019.4 and above
 - Support for configurable suffix for logfile names with options to add timestamp and/or seq number.
 
 ## [0.0.10-preview.10] - 2020-08-03
+
 - Fixed an issue for images coming out flipped for Metal Graphics API
 - Added a public API ShouldFlipY to check if the image readback from backbuffer needs to be flipped.
 - Updating core dependency to preview.16

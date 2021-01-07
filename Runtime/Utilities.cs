@@ -2,14 +2,31 @@ using System;
 using System.IO;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 using UnityEngine;
+using Unity.Profiling;
+using UnityEngine.Rendering;
 using UnityEngine.Experimental.Rendering;
 
 namespace Unity.Simulation
 {
+    internal static class RenderTextureExtensions
+    {
+        public static bool CompareFormat(this RenderTexture rt, GraphicsFormat format)
+        {
+#if UNITY_2019_3_OR_NEWER
+            return rt.graphicsFormat == format;
+#else
+            return rt.format == GraphicsFormatUtility.GetRenderTextureFormat(format);
+#endif
+        }
+    }
+
     public static class GraphicsUtilities
     {
+        static ProfilerMarker s_GetPixelsSlow = new ProfilerMarker("Capture (readback synchronous)");
+
         /// <summary>
         /// Get the GraphicsFormat for the input  number of depth bits per pixel.
         /// </summary>
@@ -51,13 +68,16 @@ namespace Unity.Simulation
         }
 
 #if !UNITY_2019_3_OR_NEWER
-        static Dictionary<GraphicsFormat, int> _blockSizeMap = new Dictionary<GraphicsFormat, int>();
-        static Dictionary<GraphicsFormat, int> _componentCountMap = new Dictionary<GraphicsFormat, int>();
+        static Dictionary<GraphicsFormat, int> _blockSizeMap;
+#pragma warning disable CS0649
+        static Dictionary<GraphicsFormat, int> _componentCountMap;
+#pragma warning restore CS0649
 
         [RuntimeInitializeOnLoadMethod]
         static void SetupAlternateGetBlockSize()
         {
             _blockSizeMap = new Dictionary<GraphicsFormat, int>();
+            _componentCountMap = new Dictionary<GraphicsFormat, int>();
             foreach (GraphicsFormat format in Enum.GetValues(typeof(GraphicsFormat)))
             {
                 _blockSizeMap[format] = (int)GraphicsFormatUtility.GetBlockSize(format);
@@ -106,70 +126,87 @@ namespace Unity.Simulation
         /// <exception cref="NotSupportedException"></exception>
         public static byte[] GetPixelsSlow(RenderTexture renderTexture)
         {
-            var graphicsFormat = GraphicsFormatUtility.GetGraphicsFormat(renderTexture.format, false);
-            var pixelSize = GraphicsUtilities.GetBlockSize(graphicsFormat);
-            var channels = GraphicsFormatUtility.GetComponentCount(graphicsFormat);
-            var channelSize = pixelSize / channels;
-            var rect = new Rect(0, 0, renderTexture.width, renderTexture.height);
-
-            // for RGB(A) we can just return the raw data.
-            if (channels >= 3 && channels <= 4)
+            using (s_GetPixelsSlow.Auto())
             {
-                var texture = new Texture2D(renderTexture.width, renderTexture.height);
-                RenderTexture.active = renderTexture;
-                texture.ReadPixels(rect, 0, 0);
-                RenderTexture.active = null;
-                var data = texture.GetRawTextureData();
-                UnityEngine.Object.Destroy(texture);
-                return data;
-            }
-            else
-            {
-                Debug.Assert(channels == 1, "Can only handle a single channel RT.");
+                var pixelSize = GraphicsUtilities.GetBlockSize(renderTexture.graphicsFormat);
+                var channels = GraphicsFormatUtility.GetComponentCount(renderTexture.graphicsFormat);
+                var channelSize = pixelSize / channels;
+                var rect = new Rect(0, 0, renderTexture.width, renderTexture.height);
 
-                // Read pixels must be one of RGBA32, ARGB32, RGB24, RGBAFloat or RGBAHalf.
-                // So R16 and RFloat will be converted to RGBAFloat.
-                var texture = new Texture2D(renderTexture.width, renderTexture.height, TextureFormat.RGBAFloat, false);
-
-                RenderTexture.active = renderTexture;
-                texture.ReadPixels(rect, 0, 0);
-                RenderTexture.active = null;
-
-                var length = renderTexture.width * renderTexture.height;
-                var input  = ArrayUtilities.Cast<float>(texture.GetRawTextureData());
-                UnityEngine.Object.Destroy(texture);
-
-                Array output = null;
-
-                int index = 0;
-                switch (channelSize)
+                // for RGB(A) we can just return the raw data.
+                if (channels >= 3 && channels <= 4)
                 {
-                    case 2:
-                        short[] shorts = ArrayUtilities.Allocate<short>(length);
-                        var si = 0;
-                        var numerator = (1<<16)-1;
-                        while (index < length)
-                        {
-                            shorts[index++] = (short)(numerator * input[si]);
-                            si += 4;
-                        }
-                        output = shorts;
-                        break;
-                    case 4:
-                        float[] floats = ArrayUtilities.Allocate<float>(length);
-                        var fi = 0;
-                        while (index < length)
-                        {
-                            floats[index++] = input[fi];
-                            fi += 4;
-                        }
-                        output = floats;
-                        break;
-                    default:
-                        throw new NotSupportedException();
+                    var texture = new Texture2D(renderTexture.width, renderTexture.height, renderTexture.graphicsFormat, TextureCreationFlags.None);
+                    RenderTexture.active = renderTexture;
+                    texture.ReadPixels(rect, 0, 0);
+                    texture.Apply();
+                    RenderTexture.active = null;
+                    var data = texture.GetRawTextureData<byte>().ToArray();
+                    UnityEngine.Object.Destroy(texture);
+                    return data;
                 }
+                else
+                {
+                    Debug.Assert(channels == 1, "Can only handle a single channel RT.");
 
-                return ArrayUtilities.Cast<byte>(output);
+                    // Read pixels must be one of RGBA32, ARGB32, RGB24, RGBAFloat or RGBAHalf.
+                    // So R16 and RFloat will be converted to RGBAFloat.
+                    var texture = new Texture2D(renderTexture.width, renderTexture.height, TextureFormat.RGBAFloat, false);
+
+                    RenderTexture.active = renderTexture;
+                    texture.ReadPixels(rect, 0, 0);
+                    texture.Apply();
+                    RenderTexture.active = null;
+
+                    var length = renderTexture.width * renderTexture.height;
+                    var input  = texture.GetRawTextureData<float>().ToArray();
+                    UnityEngine.Object.Destroy(texture);
+
+                    Array output = null;
+
+                    int index = 0;
+                    switch (channelSize)
+                    {
+                        case 2:
+                            if (GraphicsFormatUtility.IsSignedFormat(renderTexture.graphicsFormat))
+                            {
+                                short[] shorts = ArrayUtilities.Allocate<short>(length);
+                                var si = 0;
+                                while (index < length)
+                                {
+                                    shorts[index++] = (short)((float)short.MaxValue * input[si]);
+                                    si += 4;
+                                }
+                                output = shorts;
+                            }
+                            else
+                            {
+                                ushort[] ushorts = ArrayUtilities.Allocate<ushort>(length);
+                                var si = 0;
+                                while (index < length)
+                                {
+                                    ushorts[index++] = (ushort)((float)ushort.MaxValue * input[si]);
+                                    si += 4;
+                                }
+                                output = ushorts;
+                            }
+                            break;
+                        case 4:
+                            float[] floats = ArrayUtilities.Allocate<float>(length);
+                            var fi = 0;
+                            while (index < length)
+                            {
+                                floats[index++] = input[fi];
+                                fi += 4;
+                            }
+                            output = floats;
+                            break;
+                        default:
+                            throw new NotSupportedException();
+                    }
+
+                    return ArrayUtilities.Cast<byte>(output);
+                }
             }
         }
     }

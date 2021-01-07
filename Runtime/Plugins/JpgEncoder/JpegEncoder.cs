@@ -266,6 +266,8 @@ public class JpegEncoder
         if (result < 0)
             return null;
 
+        // IL2CPP crashes for some reason resizing the array, so we have to make a copy instead.
+
         var jpgData = new byte[size];
         Array.Copy(temp, 0, jpgData, 0, size);
 

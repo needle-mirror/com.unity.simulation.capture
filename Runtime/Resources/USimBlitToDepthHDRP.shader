@@ -5,11 +5,11 @@ Shader "usim/BlitCopyDepthHDRP"
         Tags{ "RenderPipeline" = "HDRenderPipeline" }
         Pass
         {
-            Name "Custom Pass 0"
-            ZWrite Off
-            ZTest Always
-            Blend SrcAlpha OneMinusSrcAlpha
-            Cull Off
+            // Name "Custom Pass 0"
+            // ZWrite Off
+            // ZTest Always
+            // Blend SrcAlpha OneMinusSrcAlpha
+            // Cull Off
 
             HLSLPROGRAM
 
@@ -26,10 +26,10 @@ Shader "usim/BlitCopyDepthHDRP"
             {
                 UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(varyings);
                 float depth = LoadCameraDepth(varyings.positionCS.xy);
+                depth = Linear01Depth(depth, _ZBufferParams);
                 return float4(depth, depth, depth, 1);
             }
 #else
-
             /// Dummy Implementation for non HDRP_ENABLED variants
 
             #include "UnityCG.cginc"

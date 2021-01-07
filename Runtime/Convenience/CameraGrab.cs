@@ -12,7 +12,9 @@ namespace Unity.Simulation
 {
     public class CameraGrab : MonoBehaviour
     {
-
+#if UNITY_2019_3_OR_NEWER
+        public NameGenerator       _nameGenerator;
+#endif
 #pragma warning disable CS0649
         public Camera[]            _cameraSources;
 #pragma warning restore CS0649
@@ -38,7 +40,7 @@ namespace Unity.Simulation
             if (_batchReadback)
             {
                 CaptureOptions.useBatchReadback = _batchReadback;
-                BatchReadback.Instance().BatchSize = _batchSize;
+                BatchReadback.Instance.BatchSize = _batchSize;
             }
 #endif
         }
@@ -50,9 +52,17 @@ namespace Unity.Simulation
             {
                 _elapsedTime -= _screenCaptureInterval;
 
+                string path = "";
                 for (var i = 0; i < _cameraSources.Length; i++)
                 {
-                    CaptureCamera.CaptureColorToFile(_cameraSources[i], _format, Path.Combine(_baseDirectory, _cameraSources[i].name+ "_" + _sequence + "." + _imageFormat.ToString().ToLower()), _imageFormat);
+#if UNITY_2019_3_OR_NEWER
+                    if (_nameGenerator != null)
+                        path = _nameGenerator.Generate(Path.Combine(_baseDirectory, $"{_cameraSources[i].name}.{_imageFormat.ToString().ToLower()}"));
+                    else
+#endif
+                        path = Path.Combine(_baseDirectory, _cameraSources[i].name+ "_" + _sequence + "." + _imageFormat.ToString().ToLower());
+
+                    CaptureCamera.CaptureColorToFile(_cameraSources[i], _format, path, _imageFormat);
                 }
 
                 ++_sequence;
@@ -82,7 +92,7 @@ namespace Unity.Simulation
                 {
                     var c = _cameraSources[i];
                     if (map.ContainsKey(c.name))
-                        Debug.LogWarning($"Warning: camera at index {i} has the same name as a previous camera at index {map[c.name]}, this will cause capture files to be overwritten. Please specify a unique name for this camera.");
+                        Log.W($"Warning: camera at index {i} has the same name as a previous camera at index {map[c.name]}, this will cause capture files to be overwritten. Please specify a unique name for this camera.");
                     else
                         map.Add(c.name, i);
                     
@@ -92,7 +102,7 @@ namespace Unity.Simulation
                 
                 if (cameraWithNoRtCount > 1)
                 {
-                    Debug.LogWarning("Target Texture is set to None for cameras other than the main camera.");
+                    Log.W("Target Texture is set to None for cameras other than the main camera.");
                 }
             }
         }
@@ -117,5 +127,5 @@ public class CameraGrab_Editor : Editor
         }
     }
 }
-#endif
+#endif // UNITY_EDITOR
 #endif // UNITY_2019_3_OR_NEWER

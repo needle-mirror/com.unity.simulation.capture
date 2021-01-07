@@ -1,12 +1,16 @@
 ﻿#if PLATFORM_CLOUD_RENDERING && !UNITY_EDITOR
+using System;
+using System.Linq;
+using System.IO;
+
 using System.Collections;
 using System.Collections.Generic;
+using Unity.Simulation;
 using UnityEngine;
+
 using UnityEngine.LowLevel;
 using UnityEngine.PlayerLoop;
-using System.Linq;
-using System;
-using System.IO;
+
 using UnityEngine.CloudRendering;
 
 public class HeadlessCustomPlayerLoop
@@ -31,7 +35,7 @@ public class HeadlessCustomPlayerLoop
             }
             else
             {
-                Debug.LogError("Failed to create a render texture for default backbuffer surface");
+                Log.E("Failed to create a render texture for default backbuffer surface");
             }
         }
         var loopSystem = GenerateCustomLoop();

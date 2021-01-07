@@ -1,6 +1,7 @@
 ﻿using System;
 using System.IO;
 using System.Text;
+using System.Threading;
 using System.Timers;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
@@ -19,11 +20,11 @@ namespace Unity.Simulation
         protected string _userPath;
         protected string _name;
         protected string _extension;
-        protected int _sequence = 0;
+        protected int _sequence = -1;
         protected Func<string> _suffixAction;
 
 
-        protected LoggerSuffixOption _loggerSuffixOption = LoggerSuffixOption.SEQ_NO;
+        protected LoggerSuffixOption _loggerSuffixOption = LoggerSuffixOption.BOTH;
 
         public void SetOutputPath(string type, string name, string extension, string userPath = "", Func<string> suffixAppend = null, LoggerSuffixOption option = LoggerSuffixOption.SEQ_NO)
         {
@@ -49,19 +50,25 @@ namespace Unity.Simulation
                 switch (_loggerSuffixOption)
                 {
                     case LoggerSuffixOption.SEQ_NO:
-                        suffix = _sequence++ + "";
+                    {
+                        suffix = Interlocked.Increment(ref _sequence).ToString();
                         break;
+                    }
                     case LoggerSuffixOption.TIME_STAMP:
+                    {
                         suffix = DateTime.UtcNow.ToString("yyyy-MM-ddThh-mm-ss");
                         break;
+                    }
                     case LoggerSuffixOption.BOTH:
-                        suffix = DateTime.UtcNow.ToString("yyyy-MM-ddThh-mm-ss") + "_" + (_sequence++);
+                    {
+                        suffix = DateTime.UtcNow.ToString("yyyy-MM-ddThh-mm-ss") + "_" + (Interlocked.Increment(ref _sequence));
                         break;
+                    }
                 }
             }
             else
             {
-                suffix += "_"+(_sequence++);
+                suffix += "_"+ Interlocked.Increment(ref _sequence);
             }
             return Path.Combine(Manager.Instance.GetDirectoryFor(_type, _userPath), string.Format("{0}_{1}{2}", _name, suffix, _extension));
         }
@@ -148,7 +155,7 @@ namespace Unity.Simulation
                 var result = Unity.Simulation.FileProducer.Write(GetPath(), r.data.colorBuffer as Array);
                 return result ? AsyncRequest<CaptureCamera.CaptureState>.Result.Completed : AsyncRequest<CaptureCamera.CaptureState>.Result.Error;
             };
-            CaptureCamera.Capture(sourceCamera, functor);
+            CaptureCamera.Capture(sourceCamera, functor, forceFlip: ForceFlip.None);
         }
     }
 }

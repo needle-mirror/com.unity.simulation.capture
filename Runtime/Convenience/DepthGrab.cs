@@ -7,6 +7,9 @@ namespace Unity.Simulation
 {   
     public class DepthGrab : MonoBehaviour
     {
+#if UNITY_2019_3_OR_NEWER
+        public NameGenerator       _nameGenerator;
+#endif
         public CaptureImageEncoder.ImageFormat _imageFormat = CaptureImageEncoder.ImageFormat.Jpg;
         public float               _screenCaptureInterval = 1.0f;
         public GraphicsFormat      _format = GraphicsFormat.R8G8B8A8_UNorm;
@@ -35,11 +38,19 @@ namespace Unity.Simulation
                     _camera.targetTexture = new RenderTexture(_camera.pixelWidth, _camera.pixelHeight,0, _format);
                 }
 
+                string path = "";
+#if UNITY_2019_3_OR_NEWER
+                if (_nameGenerator != null)
+                    path = _nameGenerator.Generate(Path.Combine(_baseDirectory, $"{_camera.name}.{_imageFormat.ToString().ToLower()}"));
+                else
+#endif
+                    path = Path.Combine(_baseDirectory, _camera.name + "_depth_" + _sequence + "." + _imageFormat.ToString().ToLower());
+
                 CaptureCamera.CaptureDepthToFile
                 (
                     _camera, 
                     _format, 
-                    Path.Combine(_baseDirectory, _camera.name + "_depth_" + _sequence + "." + _imageFormat.ToString().ToLower()),
+                    path,
                     _imageFormat
                 );
 

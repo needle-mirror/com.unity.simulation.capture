@@ -5,7 +5,7 @@ using System.Linq;
 using Unity.PerformanceTesting;
 using UnityEngine;
 using UnityEngine.TestTools;
-using Debug = UnityEngine.Debug;
+using Unity.Simulation;
 
 public class CapturePerformanceBase : MonoBehaviour, IMonoBehaviourTest
 {
@@ -34,7 +34,7 @@ public class CapturePerformanceBase : MonoBehaviour, IMonoBehaviourTest
             if (_isMetricsCaptured)
             {
                 EndMetricCapture();
-                Debug.Log("Finishing the test");
+                Log.I("Finishing the test");
                 isTestFinished = true;
             }
 
