@@ -158,6 +158,11 @@ namespace Unity.Simulation
                         r.data.depthTrigger = null;
                     }
 #endif
+                    if (r.data.normalTrigger != null)
+                    {
+                        r.data.normalTrigger(null, default);
+                        r.data.normalTrigger = null;
+                    }
                     if (r.data.motionTrigger != null)
                     {
                         r.data.motionTrigger(null, default);
@@ -172,8 +177,7 @@ namespace Unity.Simulation
         {
             for (int i = pending.Count - 1; i >= 0; --i)
             {
-                var r = pending[i];
-                if (r.data.colorFunctor == null && r.data.depthFunctor == null && r.data.motionFunctor == null)
+                if (pending[i].data.completed)
                     pending.RemoveAt(i);
             }
         }
@@ -287,14 +291,6 @@ namespace Unity.Simulation
             {
                 if (Application.isPlaying && instance._pendingCameraRequests.ContainsKey(camera))
                 {
-                    RenderTargetIdentifier rtid = default;
-                    HDAdditionalCameraData additionalCameraData;
-                    if (camera.TryGetComponent<HDAdditionalCameraData>(out additionalCameraData))
-                    {
-                        var buffer = additionalCameraData.GetGraphicsBuffer(HDAdditionalCameraData.BufferAccessType.Color);
-                        rtid = buffer.nameID;
-                    }
-
                     var pending = instance._pendingCameraRequests[camera];
                     foreach (var r in pending)
                     {

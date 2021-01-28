@@ -1,4 +1,4 @@
-Shader "usim/BlitCopyMotion"
+Shader "usim/BlitCopyNormals"
 {
     SubShader
     {
@@ -14,8 +14,8 @@ Shader "usim/BlitCopyMotion"
             #pragma fragment frag
             #include "UnityCG.cginc"
 
-            sampler2D _CameraMotionVectorsTexture;
-            float4 _CameraMotionVectorsTexture_ST;
+            sampler2D _CameraDepthNormalsTexture;
+            float4 _CameraDepthNormalsTexture_ST;
 
             struct v2f
             {
@@ -27,36 +27,44 @@ Shader "usim/BlitCopyMotion"
             {
                 v2f o;
                 o.pos = UnityObjectToClipPos(v.vertex);
-                o.uv = TRANSFORM_TEX(v.texcoord.xy, _CameraMotionVectorsTexture);
+                o.uv = TRANSFORM_TEX(v.texcoord.xy, _CameraDepthNormalsTexture);
                 return o;
             }
 
 #if CHANNELS1
-            float2 frag(v2f i) : COLOR
+            float frag(v2f i) : COLOR
             {
-                float2 motion = tex2D(_CameraMotionVectorsTexture, i.uv).rg;
-                return motion.x;
+                float3 normal;
+                float  depth;
+                DecodeDepthNormal(tex2D(_CameraDepthNormalsTexture, i.uv), depth, normal);
+                return normal.x;
             }
 #endif
 #if CHANNELS2
             float2 frag(v2f i) : COLOR
             {
-                float2 motion = tex2D(_CameraMotionVectorsTexture, i.uv).rg;
-                return motion;
+                float3 normal;
+                float  depth;
+                DecodeDepthNormal(tex2D(_CameraDepthNormalsTexture, i.uv), depth, normal);
+                return normal.xy;
             }
 #endif
 #if CHANNELS3
             float3 frag(v2f i) : COLOR
             {
-                float2 motion = tex2D(_CameraMotionVectorsTexture, i.uv).rg;
-                return float3(motion, 0);
+                float3 normal;
+                float  depth;
+                DecodeDepthNormal(tex2D(_CameraDepthNormalsTexture, i.uv), depth, normal);
+                return normal.xyz;
             }
 #endif
 #if CHANNELS4
             float4 frag(v2f i) : COLOR
             {
-                float2 motion = tex2D(_CameraMotionVectorsTexture, i.uv).rg;
-                return float4(motion, 0, 1);
+                float3 normal;
+                float  depth;
+                DecodeDepthNormal(tex2D(_CameraDepthNormalsTexture, i.uv), depth, normal);
+                return float4(normal, 1);
             }
 #endif
             ENDCG

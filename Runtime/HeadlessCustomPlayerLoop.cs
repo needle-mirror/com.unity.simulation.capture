@@ -28,7 +28,27 @@ public class HeadlessCustomPlayerLoop
     {
         if (headlessTexture == null)
         {
-            headlessTexture = new RenderTexture(640, 480, 1);
+            var playerSettings = Resources.Load<PlayerResolutionSettings>("PlayerResolutionSettings");
+            if (playerSettings == null)
+            {
+                headlessTexture.width = 640;
+                headlessTexture.height = 480;
+                Log.W("Player Settings resolution scriptable object not found, loading default of 640X480");
+            }
+            else
+            {
+                if (playerSettings.renderTexture != null)
+                {
+                    headlessTexture = playerSettings.renderTexture;
+                    headlessTexture.width = playerSettings.playerResolution.width;
+                    headlessTexture.height = playerSettings.playerResolution.height;
+                }
+                else
+                {
+                    headlessTexture = new RenderTexture(playerSettings.playerResolution.width, playerSettings.playerResolution.height, 1);
+                }
+            }
+            
             if (headlessTexture.Create())
             {
                 CloudGraphics.SetDefaultBackbufferSurface(headlessTexture);

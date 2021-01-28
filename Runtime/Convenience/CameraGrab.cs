@@ -3,7 +3,6 @@ using System.IO;
 using Unity.Simulation;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
-using UnityEngine.UI;
 #if UNITY_EDITOR
 using UnityEditor;
 #endif

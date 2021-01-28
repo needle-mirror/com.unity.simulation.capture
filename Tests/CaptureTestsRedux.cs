@@ -368,7 +368,7 @@ public class CaptureTestsRedux
             depthFormat,
             channel == Channel.Motion ? functor : null,
             motionFormat,
-            ForceFlip.None
+            forceFlip: ForceFlip.None
         );
     }
 

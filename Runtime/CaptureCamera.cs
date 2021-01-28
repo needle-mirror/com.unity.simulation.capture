@@ -19,8 +19,9 @@ namespace Unity.Simulation
         None,
         Color  = (1 << 0),
         Depth  = (1 << 1),
-        Motion = (1 << 2),
-        All    = Color | Depth | Motion,
+        Normal = (1 << 2),
+        Motion = (1 << 3),
+        All    = Color | Depth | Normal | Motion,
     }
 
     /// <summary>
@@ -53,6 +54,10 @@ namespace Unity.Simulation
             /// </summary>
             Depth,
             /// <summary>
+            /// Enumeration value specifying the normals channel.
+            /// </summary>
+            Normal,
+            /// <summary>
             /// Enumeration value specifying the motion vectors channel.
             /// </summary>
             Motion,
@@ -68,8 +73,14 @@ namespace Unity.Simulation
         public struct CaptureState
         {
             /// <summary>
+            /// The camera associated with this capture request.
             /// </summary>
             public Camera camera;
+
+            /// <summary>
+            /// The frame number this request was issued on.
+            /// </summary>
+            public int frame;
 
             /// <summary>
             /// While in flight, references the source buffer to read from.
@@ -87,6 +98,12 @@ namespace Unity.Simulation
             /// While in flight, references the source buffer to read from.
             /// When completed, references the captured data in Array form.
             /// </summary>
+            public object normalBuffer;
+
+            /// <summary>
+            /// While in flight, references the source buffer to read from.
+            /// When completed, references the captured data in Array form.
+            /// </summary>
             public object motionBuffer;
 
             /// <summary>
@@ -98,8 +115,9 @@ namespace Unity.Simulation
             {
                 switch (channel)
                 {
-                    case Channel.Color:  colorBuffer = buffer; break;
-                    case Channel.Depth:  depthBuffer = buffer; break;
+                    case Channel.Color:  colorBuffer  = buffer; break;
+                    case Channel.Depth:  depthBuffer  = buffer; break;
+                    case Channel.Normal: normalBuffer = buffer; break;
                     case Channel.Motion: motionBuffer = buffer; break;
                     default: throw new ArgumentException("CaptureState.SetBuffer invalid channel.");
                 }
@@ -121,6 +139,12 @@ namespace Unity.Simulation
             /// Completion function for handling capture results. Invoked once the capture data is ready.
             /// The handler is responsible for persisting the data. Once invoked, the data is discarded.
             /// </summary>
+            public Func<AsyncRequest<CaptureState>, AsyncRequest.Result> normalFunctor;
+
+            /// <summary>
+            /// Completion function for handling capture results. Invoked once the capture data is ready.
+            /// The handler is responsible for persisting the data. Once invoked, the data is discarded.
+            /// </summary>
             public Func<AsyncRequest<CaptureState>, AsyncRequest.Result> motionFunctor;
 
             /// <summary>
@@ -134,8 +158,9 @@ namespace Unity.Simulation
                 Func<AsyncRequest<CaptureState>, AsyncRequest.Result> previous = null;
                 switch (channel)
                 {
-                    case Channel.Color:  previous = colorFunctor; colorFunctor = functor; break;
-                    case Channel.Depth:  previous = depthFunctor; depthFunctor = functor; break;
+                    case Channel.Color:  previous = colorFunctor;  colorFunctor  = functor; break;
+                    case Channel.Depth:  previous = depthFunctor;  depthFunctor  = functor; break;
+                    case Channel.Normal: previous = normalFunctor; normalFunctor = functor; break;
                     case Channel.Motion: previous = motionFunctor; motionFunctor = functor; break;
                     default: throw new ArgumentException("CaptureState.SetFunctor invalid channel.");
                 }
@@ -153,6 +178,11 @@ namespace Unity.Simulation
             public Action<CommandBuffer, RenderTargetIdentifier> depthTrigger;
 
             /// <summary>
+            /// Action to populate the command buffer to readback a normal target.
+            /// </summary>
+            public Action<CommandBuffer, RenderTargetIdentifier> normalTrigger;
+
+            /// <summary>
             /// Action to populate the command buffer to readback a motion target.
             /// </summary>
             public Action<CommandBuffer, RenderTargetIdentifier> motionTrigger;
@@ -167,13 +197,20 @@ namespace Unity.Simulation
                 Action<CommandBuffer, RenderTargetIdentifier> previous = null;
                 switch (channel)
                 {
-                    case Channel.Color:  previous = this.colorTrigger; this.colorTrigger  = action; break;
-                    case Channel.Depth:  previous = this.depthTrigger; this.depthTrigger  = action; break;
+                    case Channel.Color:  previous = this.colorTrigger;  this.colorTrigger  = action; break;
+                    case Channel.Depth:  previous = this.depthTrigger;  this.depthTrigger  = action; break;
+                    case Channel.Normal: previous = this.normalTrigger; this.normalTrigger = action; break;
                     case Channel.Motion: previous = this.motionTrigger; this.motionTrigger = action; break;
                     default: throw new InvalidOperationException();
                 }
                 return previous;
             }
+
+            /// <summary>
+            /// Property to determine if the capture request has completed.
+            /// </summary>
+            /// <returns>true if completed, false otherwise.</returns>
+            public bool completed { get { return colorFunctor == null && depthFunctor == null && normalFunctor == null && motionFunctor == null; }}
 
             /// <summary>
             /// Help method to get the completion functor for the specified channel.
@@ -185,6 +222,7 @@ namespace Unity.Simulation
                 {
                     case Channel.Color:  return colorFunctor;
                     case Channel.Depth:  return depthFunctor;
+                    case Channel.Normal: return normalFunctor;
                     case Channel.Motion: return motionFunctor;
                     default: throw new ArgumentException("CaptureState.SetFunctor invalid channel.");
                 }
@@ -194,6 +232,7 @@ namespace Unity.Simulation
         [RuntimeInitializeOnLoadMethod]
         static void Notifications()
         {
+            Log.I("Resolution Height: " + Screen.currentResolution.height + " Width: " + Screen.currentResolution.width);
             Manager.Instance.StartNotification += () =>
             {
                 SetupMaterials();
@@ -239,10 +278,12 @@ namespace Unity.Simulation
         {
             CameraEvent.AfterEverything,
             CameraEvent.AfterDepthTexture,
+            CameraEvent.AfterDepthTexture,
             CameraEvent.BeforeImageEffects,
         };
 
         static Material[] _depthMaterials;
+        static Material[] _normalMaterials;
         static Material[] _motionMaterials;
 
         /// <summary>
@@ -336,6 +377,7 @@ namespace Unity.Simulation
         /// <param name="motionFormat"> The pixel format to capture in. </param>
         /// <param name="flipY"> Whether or not to flip the image vertically. </param>
         /// <returns>AsyncRequest&lt;CaptureState&gt;</returns>
+        [Obsolete("Capture with boolean flipY has been deprecated. Use the version with ForceFlipY instead.")]
         public static AsyncRequest<CaptureState> Capture
         (
             Camera camera,
@@ -348,7 +390,7 @@ namespace Unity.Simulation
             bool flipY = false
         )
         {
-            return Capture(camera, colorFunctor, colorFormat, depthFunctor, depthFormat, motionFunctor, motionFormat, flipY ? ForceFlip.All : ForceFlip.None);
+            return Capture(camera, colorFunctor, colorFormat, depthFunctor, depthFormat, motionFunctor, motionFormat, forceFlip: flipY ? ForceFlip.All : ForceFlip.None);
         }
 
         /// <summary>
@@ -370,48 +412,32 @@ namespace Unity.Simulation
             Func<AsyncRequest<CaptureState>, AsyncRequest.Result> colorFunctor = null,
             GraphicsFormat colorFormat = GraphicsFormat.R8G8B8A8_UNorm, 
             Func<AsyncRequest<CaptureState>, AsyncRequest.Result> depthFunctor = null,
-            GraphicsFormat depthFormat = GraphicsFormat.R16_UNorm,
+            GraphicsFormat depthFormat = GraphicsFormat.R8G8B8A8_UNorm,
+            Func<AsyncRequest<CaptureState>, AsyncRequest.Result> normalFunctor = null,
+            GraphicsFormat normalFormat = GraphicsFormat.R8G8B8A8_UNorm,
             Func<AsyncRequest<CaptureState>, AsyncRequest.Result> motionFunctor = null,
-            GraphicsFormat motionFormat = GraphicsFormat.R16_UNorm,
+            GraphicsFormat motionFormat = GraphicsFormat.R8G8B8A8_UNorm,
             ForceFlip forceFlip = ForceFlip.None,
             RenderTextureReadWrite readWrite = RenderTextureReadWrite.Default
         )
         {
-#if UNITY_EDITOR
-            Debug.Assert(camera != null, "Capture camera cannot be null.");
-            Debug.Assert(colorFunctor != null || depthFunctor != null || motionFunctor != null, "Capture one functor must be valid.");
-
-            if (colorFunctor != null)
-            {
-                Debug.Assert(GraphicsUtilities.SupportsRenderTextureFormat(colorFormat), "GraphicsFormat not supported");
-            }
-
-            if (depthFunctor != null)
-            {
-                Debug.Assert((camera.depthTextureMode & (DepthTextureMode.Depth | DepthTextureMode.DepthNormals)) != 0, "Depth not specified for camera");
-                Debug.Assert(GraphicsUtilities.SupportsRenderTextureFormat(depthFormat), "GraphicsFormat not supported");
-#if URP_ENABLED
-                Debug.Assert(SRPSupport.URPRendererFeatureAdded, "Unity Simulation URPCaptureRendererFeature has not been added to the scriptable renderer.");
-                Debug.Assert(SRPSupport.URPCameraDepthEnabled, "Depth is not enabled in the URP render pipeline asset.");
-#endif
-            }
-
-            if (motionFunctor != null)
-            {
-                Debug.Assert((camera.depthTextureMode & DepthTextureMode.MotionVectors) != 0, "Motion vectors not enabled in depthTextureMode");
-                Debug.Assert(SystemInfo.supportsMotionVectors, "Motion vectors are not supported");
-                Debug.Assert(GraphicsUtilities.SupportsRenderTextureFormat(motionFormat), "GraphicsFormat not supported");
-            }
-#endif // UNITY_EDITOR
-
             var request = Manager.Instance.CreateRequest<AsyncRequest<CaptureState>>();
+
+            request.data.camera = camera;
+            request.data.frame  = Time.frameCount;
 
             if (colorFunctor != null)
                 SetupCaptureRequest(request, Channel.Color,  camera, colorFormat,  colorFunctor,  forceFlip, readWrite);
             if (depthFunctor != null)
                 SetupCaptureRequest(request, Channel.Depth,  camera, depthFormat,  depthFunctor,  forceFlip, readWrite);
+            if (normalFunctor != null)
+                SetupCaptureRequest(request, Channel.Normal, camera, normalFormat, normalFunctor, forceFlip, readWrite);
             if (motionFunctor != null)
                 SetupCaptureRequest(request, Channel.Motion, camera, motionFormat, motionFunctor, forceFlip, readWrite);
+
+#if UNITY_EDITOR
+            ValidateRequestParameters(request);
+#endif
 
 #if UNITY_2019_3_OR_NEWER
             if (scriptableRenderPipeline)
@@ -441,8 +467,10 @@ namespace Unity.Simulation
             RenderTextureReadWrite readWrite = RenderTextureReadWrite.Default
         )
         {
-            request.data.camera = camera;
             request.data.SetFunctor(channel, functor);
+
+            Debug.Assert(request.data.camera == camera, "Capture: Camera must match the camera in request.data.camera");
+            Debug.Assert(GraphicsUtilities.SupportsRenderTextureFormat(format), $"Capture: GraphicsFormat {format} not supported for {channel} channel");
 
             var material = SelectShaderVariantForChannel(channel, format);
 
@@ -478,7 +506,8 @@ namespace Unity.Simulation
             if (!usePassedInCommandBuffer)
             {
                 if (!_commandBufferPool.TryDequeue(out commandBuffer))
-                    commandBuffer = new CommandBuffer(){ name = $"cb.{channel.ToString()}"};
+                    commandBuffer = new CommandBuffer();
+                commandBuffer.name = $"cb.{channel.ToString()}";
             }
 
             if (SRPSupport.GetCurrentPipelineRenderingType() == RenderingPipelineType.BUILTIN)
@@ -498,7 +527,7 @@ namespace Unity.Simulation
             // If we're doing a blit from NULL ("backbuffer") into destination, we'll need to blit once
             // into a RT, (since we can't sample backbuffer in a shader), and inverting (sourceScale)
             // is ignored when blitting from the NULL target, due to taking the GrabPass path.
-            if (rt == null && !usePassedInRenderTargetId)
+            if (channel == Channel.Color && rt == null && !usePassedInRenderTargetId)
             {
                 rt1 = RenderTexture.GetTemporary(camera.pixelWidth, camera.pixelHeight, 0, rtf, readWrite);
                 commandBuffer.Blit(null, rt1);
@@ -638,6 +667,8 @@ namespace Unity.Simulation
                         break;
                     case Channel.Depth:
                         break;
+                    case Channel.Normal:
+                        break;
                     case Channel.Motion:
                         break;
                 }
@@ -679,7 +710,10 @@ namespace Unity.Simulation
 
         static void SetupMaterials()
         {
-            _depthMaterials = new Material[4];
+            _depthMaterials  = new Material[4];
+            _normalMaterials = new Material[4];
+            _motionMaterials = new Material[4];
+
             switch (SRPSupport.GetCurrentPipelineRenderingType())
             {
                 case RenderingPipelineType.BUILTIN:
@@ -687,6 +721,16 @@ namespace Unity.Simulation
                     {
                         _depthMaterials[i] = new Material(Shader.Find("usim/BlitCopyDepth"));
                         _depthMaterials[i].EnableKeyword($"CHANNELS{i + 1}");
+                    };
+                    for (var i = 0; i < _normalMaterials.Length; ++i)
+                    {
+                        _normalMaterials[i] = new Material(Shader.Find("usim/BlitCopyNormals"));
+                        _normalMaterials[i].EnableKeyword($"CHANNELS{i + 1}");
+                    };
+                    for (var i = 0; i < _motionMaterials.Length; ++i)
+                    {
+                        _motionMaterials[i] = new Material(Shader.Find("usim/BlitCopyMotion"));
+                        _motionMaterials[i].EnableKeyword($"CHANNELS{i + 1}");
                     };
                     break;
 
@@ -696,18 +740,15 @@ namespace Unity.Simulation
                 case RenderingPipelineType.HDRP:
                     _depthMaterials[0] = new Material(Shader.Find("usim/BlitCopyDepthHDRP"));
                     _depthMaterials[0].EnableKeyword("HDRP_ENABLED");
+                    _normalMaterials[0] = new Material(Shader.Find("usim/BlitCopyNormalsHDRP"));
+                    _normalMaterials[0].EnableKeyword("HDRP_ENABLED");
+                    _motionMaterials[0] = new Material(Shader.Find("usim/BlitCopyMotionHDRP"));
+                    _motionMaterials[0].EnableKeyword("HDRP_ENABLED");
                     break;
 
                 default:
                     throw new InvalidOperationException("Invalid RenderingPipelineType");
             }
-
-            _motionMaterials = new Material[4];
-            for (var i = 0; i < _motionMaterials.Length; ++i)
-            {
-                _motionMaterials[i] = new Material(Shader.Find("usim/BlitCopyMotion"));
-                _motionMaterials[i].EnableKeyword($"CHANNELS{i + 1}");
-            };
         }
 
         public static Material SelectShaderVariantForChannel(Channel channel, GraphicsFormat format)
@@ -718,34 +759,84 @@ namespace Unity.Simulation
                     break;
 
                 case Channel.Depth:
-                    switch (SRPSupport.GetCurrentPipelineRenderingType())
                     {
-                        case RenderingPipelineType.BUILTIN:
+                        if (SRPSupport.GetCurrentPipelineRenderingType() == RenderingPipelineType.HDRP)
+                        {
+                            Debug.Assert(_depthMaterials[0] != null);
+                            return _depthMaterials[0];
+                        }
+                        else
+                        {
                             var componentCount = GraphicsUtilities.GetComponentCount(format);
                             Debug.Assert(componentCount >= 1 && componentCount <= 4);
                             Debug.Assert(_depthMaterials[componentCount - 1] != null);
                             return _depthMaterials[componentCount - 1];
+                        }
+                    }
 
-                        case RenderingPipelineType.URP:
-                            goto case RenderingPipelineType.BUILTIN;
-
-                        case RenderingPipelineType.HDRP:
-                            Debug.Assert(_depthMaterials[0] != null);
-                            return _depthMaterials[0];
-
-                        default:
-                            throw new InvalidOperationException("Invalid RenderingPipelineType");
+                case Channel.Normal:
+                    {
+                        if (SRPSupport.GetCurrentPipelineRenderingType() == RenderingPipelineType.HDRP)
+                        {
+                            Debug.Assert(_normalMaterials[0] != null);
+                            return _normalMaterials[0];
+                        }
+                        else
+                        {
+                            var componentCount = GraphicsUtilities.GetComponentCount(format);
+                            Debug.Assert(componentCount >= 1 && componentCount <= 4);
+                            Debug.Assert(_normalMaterials[componentCount - 1] != null);
+                            return _normalMaterials[componentCount - 1];
+                        }
                     }
 
                 case Channel.Motion:
                     {
-                        var componentCount = GraphicsUtilities.GetComponentCount(format);
-                        Debug.Assert(componentCount >= 1 && componentCount <= 4);
-                        Debug.Assert(_motionMaterials[componentCount - 1] != null);
-                        return _motionMaterials[componentCount - 1];
+                        if (SRPSupport.GetCurrentPipelineRenderingType() == RenderingPipelineType.HDRP)
+                        {
+                            Debug.Assert(_motionMaterials[0] != null);
+                            return _motionMaterials[0];
+                        }
+                        else
+                        {
+                            var componentCount = GraphicsUtilities.GetComponentCount(format);
+                            Debug.Assert(componentCount >= 1 && componentCount <= 4);
+                            Debug.Assert(_motionMaterials[componentCount - 1] != null);
+                            return _motionMaterials[componentCount - 1];
+                        }
                     }
             }
             return null;
         }
+
+#if UNITY_EDITOR
+        public static void ValidateRequestParameters(AsyncRequest<CaptureState> request)
+        {
+            Debug.Assert(request != null);
+
+            Debug.Assert(request.data.camera != null, "Capture: camera cannot be null.");
+            Debug.Assert(request.data.colorFunctor != null || request.data.depthFunctor != null || request.data.normalFunctor != null || request.data.motionFunctor != null, "Capture: one functor must be valid.");
+
+            if (request.data.depthFunctor != null)
+            {
+                Debug.Assert((request.data.camera.depthTextureMode & DepthTextureMode.Depth) != 0, "Capture: Depth not specified for camera");
+#if URP_ENABLED
+                Debug.Assert(SRPSupport.URPRendererFeatureAdded, "Capture: Unity Simulation URPCaptureRendererFeature has not been added to the scriptable renderer.");
+                Debug.Assert(SRPSupport.URPCameraDepthEnabled, "Capture: Depth is not enabled in the URP render pipeline asset.");
+#endif
+            }
+
+            if (request.data.normalFunctor != null)
+            {
+                Debug.Assert((request.data.camera.depthTextureMode & DepthTextureMode.DepthNormals) != 0, "Capture: DepthNormals not specified for camera");
+            }
+
+            if (request.data.motionFunctor != null)
+            {
+                Debug.Assert((request.data.camera.depthTextureMode & DepthTextureMode.MotionVectors) != 0, "Capture: Motion vectors not enabled in depthTextureMode");
+                Debug.Assert(SystemInfo.supportsMotionVectors, "Capture: Motion vectors are not supported");
+            }
+        }
+#endif // UNITY_EDITOR
     }
 }

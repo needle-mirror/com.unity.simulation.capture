@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.0.10-preview.17] - 2021-01-28
+
+- Added support for capturing depth normal and motion vectors channels for all pipelines.
+- Fixed a bug where recycled command buffers would not get named for the channel they were being used for.
+- Added a ChannelGrab component. Add it to a camera, and select the channel to capture. You can add a component for each channel.
+
 ## [0.0.10-preview.16] - 2021-01-07
 
 - CameraGrab and DepthGrab components support an option NameGenerator parameter which can be used to customize the names picked for subsequent captures.

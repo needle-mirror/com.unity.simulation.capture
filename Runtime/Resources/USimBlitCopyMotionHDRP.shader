@@ -1,15 +1,11 @@
-Shader "usim/BlitCopyDepthHDRP"
+Shader "usim/BlitCopyMotionHDRP"
 {
     SubShader
     {
         Tags{ "RenderPipeline" = "HDRenderPipeline" }
         Pass
         {
-            Name "BlitCopyDepthHDRP"
-            ZWrite Off
-            ZTest Always
-            Blend SrcAlpha OneMinusSrcAlpha
-            Cull Off
+            Name "BlitCopyMotionHDRP"
 
             HLSLPROGRAM
 
@@ -21,13 +17,12 @@ Shader "usim/BlitCopyDepthHDRP"
 
 #if HDRP_ENABLED
             #include "Packages/com.unity.render-pipelines.high-definition/Runtime/RenderPipeline/RenderPass/CustomPass/CustomPassCommon.hlsl"
+            #include "Packages/com.unity.render-pipelines.high-definition/Runtime/PostProcessing/Shaders/MotionBlurCommon.hlsl"
 
             float4 FullScreenPass(Varyings varyings) : SV_Target
             {
-                UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(varyings);
-                float depth = LoadCameraDepth(varyings.positionCS.xy);
-                depth = Linear01Depth(depth, _ZBufferParams);
-                return float4(depth, depth, depth, 1);
+                float2 motionVector = DecodeMotionVectorFromPacked(LOAD_TEXTURE2D_X(_CameraMotionVectorsTexture, varyings.positionCS.xy));
+                return float4(motionVector, 0, 1);
             }
 #else
             /// Dummy Implementation for non HDRP_ENABLED variants
