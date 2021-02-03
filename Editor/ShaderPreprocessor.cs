@@ -10,7 +10,9 @@ namespace Unity.Simulation
     {
         string[] HDRPShaders = new string[]
         {
-            "usim/BlitCopyDepthHDRP"
+            "usim/BlitCopyDepthHDRP",
+            "usim/BlitCopyMotionHDRP",
+            "usim/BlitCopyNormalsHDRP"
         };
 
         string[] URPShaders = new string[]

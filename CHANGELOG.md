@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.10-preview.18] - 2021-02-03
+
+- Added new HDRP shaders to preprocessor list to strip on non-HDRP projects. (fixes shader error on first import)
+
 ## [0.0.10-preview.17] - 2021-01-28
 
 - Added support for capturing depth normal and motion vectors channels for all pipelines.
