@@ -18,6 +18,15 @@ namespace Unity.Simulation
             this.name = name;
         }
 
+#if HDRP_10_2_2_OR_LATER
+        protected override void Execute(CustomPassContext ctx)
+        {
+            if (Application.isPlaying)
+            {
+                callback?.Invoke(ctx.renderContext, ctx.hdCamera.camera, ctx.cmd);
+            }
+        }
+#else
         protected override void Execute(ScriptableRenderContext context, CommandBuffer commandBuffer, HDCamera hdCamera, CullingResults cullingResult)
         {
             if (Application.isPlaying)
@@ -25,6 +34,7 @@ namespace Unity.Simulation
                 callback?.Invoke(context, hdCamera.camera, commandBuffer);
             }
         }
+#endif // HDRP_10_2_2_OR_LATER
     }
 }
 #endif // HDRP_ENABLED

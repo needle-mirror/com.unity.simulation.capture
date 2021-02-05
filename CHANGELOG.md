@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.10-preview.19] - 2021-02-05
+
+- Fix compile error with HDRP 10.2.2 and later (obsolete method use)
+
 ## [0.0.10-preview.18] - 2021-02-03
 
 - Added new HDRP shaders to preprocessor list to strip on non-HDRP projects. (fixes shader error on first import)
