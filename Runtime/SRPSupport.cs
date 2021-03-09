@@ -264,7 +264,16 @@ namespace Unity.Simulation
                     RenderTargetIdentifier rtid = default;
                     UniversalAdditionalCameraData additionalCameraData;
                     if (camera.gameObject.TryGetComponent(out additionalCameraData))
+                    {
+// Working around the script updater, which has an issue in the project settings screen.
+// When you open the project settings screen on some platforms, it goes into an infinite
+// loop trying to update this script cameraDepth -> cameraDepthTarget.
+#if URP_10_0_OR_LATER
+                        rtid = additionalCameraData.scriptableRenderer.cameraDepthTarget;
+#else
                         rtid = additionalCameraData.scriptableRenderer.cameraDepth;
+#endif
+                    }
 
                     var pending = instance._pendingCameraRequests[camera];
                     foreach (var r in pending)

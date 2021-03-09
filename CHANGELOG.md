@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.10-preview.20] - 2021-03-09
+
+- Fixed an issue with the script updater not working with updating an API. CameraDepth -> CameraDepthTarget.
+
 ## [0.0.10-preview.19] - 2021-02-05
 
 - Fix compile error with HDRP 10.2.2 and later (obsolete method use)
