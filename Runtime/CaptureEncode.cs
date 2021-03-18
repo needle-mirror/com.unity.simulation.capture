@@ -81,7 +81,13 @@ namespace Unity.Simulation
                         return data;
 #if UNITY_2019_3_OR_NEWER
                     case ImageFormat.Png:
+#if USIM_USE_BUILTIN_PNG_ENCODER
                         return ImageConversion.EncodeArrayToPNG(data, format, (uint)width, (uint)height, 0);
+#else
+                        int bitDepth = 8;
+                        PngEncoder.ColorType colorType = PngEncoder.GetTypeAndDepth(GraphicsUtilities.GetBlockSize(format), GraphicsUtilities.GetComponentCount(format), ref bitDepth);
+                        return PngEncoder.Encode(ArrayUtilities.Cast<byte>(data), width, height, colorType, bitDepth, (PngEncoder.PngParam)additionalParam);
+#endif
                     case ImageFormat.Exr:
                         return ImageConversion.EncodeArrayToEXR(data, format, (uint)width, (uint)height, 0, /*EXRFlags*/(Texture2D.EXRFlags)additionalParam);
                     case ImageFormat.Tga:

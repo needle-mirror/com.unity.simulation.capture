@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.0.10-preview.21] - 2021-03-18
+
+- Optimized PNG encoder based on fast SLZ Zlib compression.
+  This native plugin is only supported on Windows, Mac, Linux. The builtin PNG encoder can be enabled by setting the build define USIM_USE_BUILTIN_PNG_ENCODER.
+- Update dependency to com.unity.simulation.core@0.0.10-preview.23
+
 ## [0.0.10-preview.20] - 2021-03-09
 
 - Fixed an issue with the script updater not working with updating an API. CameraDepth -> CameraDepthTarget.
