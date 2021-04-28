@@ -236,17 +236,12 @@ namespace Unity.Simulation
             {
                 if (Application.isPlaying && instance._pendingCameraRequests.ContainsKey(camera))
                 {
-                    RenderTargetIdentifier rtid = default;
-                    UniversalAdditionalCameraData additionalCameraData;
-                    if (camera.gameObject.TryGetComponent(out additionalCameraData))
-                        rtid = additionalCameraData.scriptableRenderer.cameraColorTarget;
-
                     var pending = instance._pendingCameraRequests[camera];
                     foreach (var r in pending)
                     {
                         if (r.data.colorTrigger != null)
                         {
-                            r.data.colorTrigger(commandBuffer, rtid);
+                            r.data.colorTrigger(commandBuffer, default);
                             r.data.colorTrigger = null;
                         }
                     }

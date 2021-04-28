@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.10-preview.22] - 2021-04-28
+
+- Fixed an issue with URP where post processing effects were not included when capturing images.
+
 ## [0.0.10-preview.21] - 2021-03-18
 
 - Optimized PNG encoder based on fast SLZ Zlib compression.
