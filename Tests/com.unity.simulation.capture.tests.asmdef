@@ -4,23 +4,36 @@
         "Unity.Simulation.Capture",
         "Unity.Simulation.Core",
         "Unity.PerformanceTesting",
-        "com.unity.simulation.tools"
-    ],
-    "optionalUnityReferences": [
-        "TestAssemblies"
+        "com.unity.simulation.tools",
+        "Unity.RenderPipelines.Universal.Runtime",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner",
+        "Unity.RenderPipelines.HighDefinition.Runtime"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
     "overrideReferences": true,
     "precompiledReferences": [
+        "nunit.framework.dll",
         "nunit.framework.dll"
     ],
     "autoReferenced": false,
     "defineConstraints": [
+        "UNITY_INCLUDE_TESTS",
         "UNITY_INCLUDE_TESTS"
     ],
     "versionDefines": [
+        {
+            "name": "com.unity.render-pipelines.universal",
+            "expression": "",
+            "define": "URP_ENABLED"
+        },
+        {
+            "name": "com.unity.render-pipelines.high-definition",
+            "expression": "",
+            "define": "HDRP_ENABLED"
+        },
         {
             "name": "com.unity.simulation.tools",
             "expression": "[0.0.10-preview.1]",

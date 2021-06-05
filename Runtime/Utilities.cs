@@ -210,4 +210,82 @@ namespace Unity.Simulation
             }
         }
     }
+
+    public class UnityVersion: IComparable<UnityVersion>
+    {
+        public int majorVersion;
+        public int minorVersion;
+        public int patchVersion;
+
+        public int CompareTo(UnityVersion obj)
+        {
+            if (majorVersion > obj.majorVersion)
+                return 1;
+            if (majorVersion == obj.majorVersion)
+            {
+                if (minorVersion > obj.minorVersion)
+                {
+                    return 1;
+                }
+
+                if (minorVersion == obj.minorVersion)
+                {
+                    if (patchVersion > obj.patchVersion)
+                        return 1;
+                    if (patchVersion < obj.patchVersion)
+                        return -1;
+                    return 0;
+                }
+            }
+
+            return -1;
+        }
+    }
+
+    public static class GeneralUtilities
+    {
+        public static bool IsUnityVersionGreaterThanEqualTo(string unityVersion)
+        {
+
+            var unityVersionToCompare = GetUnityVersionInstance(unityVersion);
+            var currentUnityVersion = GetUnityVersionInstance(Application.unityVersion);
+            Debug.Assert(unityVersionToCompare != null && currentUnityVersion != null);
+            var comparison = currentUnityVersion.CompareTo(unityVersionToCompare);
+            return (comparison == 1) || (comparison == 0);
+        }
+
+        private static UnityVersion GetUnityVersionInstance(string unityVersion)
+        {
+            var versionDetails = unityVersion.Split('.');
+            Debug.Assert(versionDetails.Length > 0, "Invalid Unity version.");
+
+            int major;
+            int minor;
+            int patch;
+            if (!Int32.TryParse(versionDetails[0], out major))
+                Log.E("Not a valid format. Major version cannot be converted to integer");
+            if (!Int32.TryParse(versionDetails[1], out minor))
+                Log.E("Not a valid format. Minor version cannot be converted to integer");
+
+            var p = versionDetails[2].Split('f', 'b', 'a');
+            if (p.Length > 0)
+            {
+                if (!Int32.TryParse(p[0], out patch))
+                    Log.E("Not a valid format. Patch version cannot be converted to integer");
+
+                var unityVersionToInstance = new UnityVersion()
+                {
+                    majorVersion = major,
+                    minorVersion = minor,
+                    patchVersion = patch
+                };
+                
+                return unityVersionToInstance;
+            }
+
+            Log.E("Invalid patch version format.");
+
+            return null;
+        }
+    }
 }

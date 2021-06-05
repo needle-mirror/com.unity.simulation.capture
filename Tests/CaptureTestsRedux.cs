@@ -10,6 +10,12 @@ using UnityEngine.Experimental.Rendering;
 #if UNITY_EDITOR
 using UnityEditor;
 #endif
+#if URP_ENABLED
+using UnityEngine.Rendering.Universal;
+#endif
+#if HDRP_ENABLED
+using UnityEngine.Rendering.HighDefinition;
+#endif
 
 using Unity.Collections;
 using Unity.Simulation;
@@ -29,6 +35,14 @@ public class CaptureTestsRedux
     ///
     /// Color Orientation Tests
     ///
+    static bool[] boolValues = new bool[] {false, true};
+    static int[] fxaaValues = new int[] {-1, 0, 1};
+
+    [UnityTest]
+    public IEnumerator CaptureTestsRedux_Color_Orientation([ValueSource("boolValues")] bool async, [ValueSource("boolValues")] bool batched, [ValueSource("boolValues")] bool useRT, [ValueSource("fxaaValues")] int fxaa)
+    {
+        return CaptureTestsRedux_Parametric(async, batched, useRT, Channel.Color, fxaa: fxaa);
+    }
 
     [UnityTest]
     public IEnumerator CaptureTestsRedux_Async_Color_Orientation()
@@ -262,7 +276,7 @@ public class CaptureTestsRedux
     }
 #endif
 
-    public IEnumerator CaptureTestsRedux_Parametric(bool async, bool batched, bool useRT, Channel channel, int depthBits = 32)
+    public IEnumerator CaptureTestsRedux_Parametric(bool async, bool batched, bool useRT, Channel channel, int depthBits = 32, int fxaa = -1)
     {
         Debug.Assert(depthBits == 16 || depthBits == 32);
 
@@ -273,7 +287,14 @@ public class CaptureTestsRedux
             BatchReadback.Instance.BatchSize = 1;
 #endif
 
-        var scene = (GameObject)UnityEngine.Object.Instantiate(Resources.Load("Capture.Test.Scene"));
+#if HDRP_ENABLED
+        var sceneName = "Capture.Test.Scene.HDRP";
+#elif URP_ENABLED
+        var sceneName = "Capture.Test.Scene.URP";
+#else
+        var sceneName = "Capture.Test.Scene.BIRP";
+#endif
+        var scene = (GameObject)UnityEngine.Object.Instantiate(Resources.Load(sceneName));
 
         var block1 = scene.transform.Find("Top Cube").gameObject;
         Debug.Assert(block1 != null);
@@ -291,6 +312,27 @@ public class CaptureTestsRedux
         var camera = Camera.main;
         Debug.Assert(camera != null);
 
+#if HDRP_ENABLED
+        var additionalCameraData = camera.GetComponent<HDAdditionalCameraData>();
+        Assert.True(additionalCameraData != null);
+        var previousAA = additionalCameraData.antialiasing;
+        if (fxaa >= 0 && fxaa <= 1)
+            additionalCameraData.antialiasing = fxaa > 0 ? HDAdditionalCameraData.AntialiasingMode.FastApproximateAntialiasing : HDAdditionalCameraData.AntialiasingMode.None;
+#elif URP_ENABLED
+        var additionalCameraData = camera.GetComponent<UniversalAdditionalCameraData>();
+        Assert.True(additionalCameraData != null);
+        var previousAA = additionalCameraData.antialiasing;
+        var previousPP = additionalCameraData.renderPostProcessing;
+        if (fxaa >= 0 && fxaa <= 1)
+        {
+            additionalCameraData.antialiasing = fxaa > 0 ? AntialiasingMode.FastApproximateAntialiasing : AntialiasingMode.None;
+            additionalCameraData.renderPostProcessing  = fxaa > 0 ? true : false;
+        }
+#else
+        if (fxaa >= 0 && fxaa <= 1)
+            Assert.Ignore();
+#endif
+
         camera.depthTextureMode = DepthTextureMode.Depth | DepthTextureMode.DepthNormals | DepthTextureMode.MotionVectors;
 
         var delay = 20;
@@ -301,7 +343,7 @@ public class CaptureTestsRedux
         var depthFormat  = depthBits == 16 ? GraphicsFormat.R16_UNorm : GraphicsFormat.R32_SFloat;
         var motionFormat = GraphicsFormat.R8G8B8A8_UNorm; 
 
-        var label = $"CaptureTestRedux_{(async?"Async":"Slow")}{(batched?"Batched":"")}{(useRT?"RT":"")}_{channel.ToString()}_Orientation{(channel == Channel.Depth ? $"_Depth{depthBits}" : "")}";
+        var label = $"CaptureTestRedux_Orientation_{channel.ToString()}{(async?"_Async":"_Slow")}{(batched?"_Batched":"")}{(useRT?"_RT":"")}{(channel == Channel.Depth ? $"_Depth{depthBits}" : "")}{(fxaa >= 0 ? $"_fxaa{fxaa}" : "")}";
         var path  = Path.Combine(Application.persistentDataPath, label);
 
         var request = CaptureDataForChannel(camera, channel, colorFormat, depthFormat, motionFormat);
@@ -339,6 +381,16 @@ public class CaptureTestsRedux
             case Channel.Motion:
                 Assert.Ignore();
                 break;
+        }
+
+        if (fxaa >= 0 && fxaa <= 1)
+        {
+#if HDRP_ENABLED || URP_ENABLED
+            additionalCameraData.antialiasing = previousAA;
+#if URP_ENABLED
+            additionalCameraData.renderPostProcessing = previousPP;
+#endif
+#endif
         }
 
         var rt = camera.targetTexture;

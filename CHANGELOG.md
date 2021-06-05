@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.10-preview.23] - 2021-06-05
+
+- Upate core dependency to 0.0.10-preview.24
+- Fixed a bug with URP where image capture would be upside down with post processing enabled, and FXAA disabled.
+- Fixed color space and lighting issue for CloudRendering.
+- Added support to set backbuffer resolution for CloudRendering from the player settings for unity verion 2020.3.8f1 and above.
+
 ## [0.0.10-preview.22] - 2021-04-28
 
 - Fixed an issue with URP where post processing effects were not included when capturing images.

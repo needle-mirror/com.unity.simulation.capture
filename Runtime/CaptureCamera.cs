@@ -2,11 +2,16 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
-
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Experimental.Rendering;
- 
+#if URP_ENABLED
+using UnityEngine.Rendering.Universal;
+#endif
+#if HDRP_ENABLED
+using UnityEngine.Rendering.HighDefinition;
+#endif
+
 namespace Unity.Simulation
 {
     /// <summary>
@@ -346,8 +351,10 @@ namespace Unity.Simulation
             {
                 colorFunctor = (AsyncRequest<CaptureState> r) =>
                 {
+                    PerfStatsManager.Instance.BeginSample("ImageEncodingAndFileIO", typeof(CaptureCollector));
                     colorPath = CaptureImageEncoder.EnforceFileExtension(colorPath, colorImageFormat);
                     var result = FileProducer.Write(colorPath, CaptureImageEncoder.EncodeArray(r.data.colorBuffer as Array, width, height, colorFormat, colorImageFormat));
+                    PerfStatsManager.Instance.EndSample("ImageEncodingAndFileIO", typeof(CaptureCollector));
                     return result ? AsyncRequest.Result.Completed : AsyncRequest.Result.Error;
                 };
             }
@@ -661,7 +668,11 @@ namespace Unity.Simulation
                 switch (channel)
                 {
                     case Channel.Color:
-#if !URP_ENABLED && !HDRP_ENABLED // URP and HDRP always pass in a RenderTargetIdentifier for the color render texture, which never needs flipping.
+#if URP_ENABLED
+                        // Issue SIMPE-356: URP color channel is inverted with FXAA disabled, and PostProcessing enabled.
+                        var additionalCameraData = camera.GetComponent<UniversalAdditionalCameraData>();
+                        shouldFlipY = additionalCameraData.antialiasing != AntialiasingMode.FastApproximateAntialiasing && additionalCameraData.renderPostProcessing != false && SystemInfo.graphicsUVStartsAtTop;
+#else
                         shouldFlipY = !usePassedInRenderTargetId && camera.targetTexture == null && SystemInfo.graphicsUVStartsAtTop;
 #endif
                         break;

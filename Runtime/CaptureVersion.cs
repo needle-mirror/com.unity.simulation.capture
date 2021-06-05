@@ -4,7 +4,7 @@ namespace Unity.Simulation
 {
     internal static class CaptureVersion
     {
-        internal const string kVersionString = "v0.0.10-preview.22";
+        internal const string kVersionString = "v0.0.10-preview.23";
 
         [RuntimeInitializeOnLoadMethod]
         static void OnRuntimeMethodLoad()

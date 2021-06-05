@@ -662,7 +662,7 @@ public class CaptureTests
                 bool fileWritten = FileProducer.Write(frameFilePath, imgFileData);
                 return (fileWritten) ? AsyncRequest.Result.Completed : AsyncRequest.Result.Error;
             },
-            flipY: false
+            forceFlip: ForceFlip.None
         );
 
         return new AsyncRequestWrapper(req, frameIndex);

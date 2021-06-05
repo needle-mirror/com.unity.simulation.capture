@@ -86,7 +86,8 @@ namespace Unity.Simulation
 #else
                         int bitDepth = 8;
                         PngEncoder.ColorType colorType = PngEncoder.GetTypeAndDepth(GraphicsUtilities.GetBlockSize(format), GraphicsUtilities.GetComponentCount(format), ref bitDepth);
-                        return PngEncoder.Encode(ArrayUtilities.Cast<byte>(data), width, height, colorType, bitDepth, (PngEncoder.PngParam)additionalParam);
+                        // Unity image rows start at the bottom left. The new .png library encodes the top row first. This flips it, but allows the override.
+                        return PngEncoder.Encode(ArrayUtilities.Cast<byte>(data), width, height, colorType, bitDepth, additionalParam == 0 ? PngEncoder.PngParam.FlipY : PngEncoder.PngParam.None);
 #endif
                     case ImageFormat.Exr:
                         return ImageConversion.EncodeArrayToEXR(data, format, (uint)width, (uint)height, 0, /*EXRFlags*/(Texture2D.EXRFlags)additionalParam);

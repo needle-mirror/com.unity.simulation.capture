@@ -290,12 +290,12 @@ namespace Unity.Simulation
 #if HDRP_ENABLED
         void HDRPSetupCustomPasses()
         {
-            var colorCallbackPass = new HDRPCallbackPass("Capture.AfterPost.Pass");
-            colorCallbackPass.callback = (context, camera, commandBuffer) =>
+            RenderPipelineManager.endCameraRendering += (context, camera) =>
             {
                 if (Application.isPlaying && instance._pendingCameraRequests.ContainsKey(camera))
                 {
                     var pending = instance._pendingCameraRequests[camera];
+                    var commandBuffer = CommandBufferPool.Get("HDRPCapture");
                     foreach (var r in pending)
                     {
                         if (r.data.colorTrigger != null)
@@ -304,15 +304,11 @@ namespace Unity.Simulation
                             r.data.colorTrigger = null;
                         }
                     }
-
                     CleanupCameraPendingRequests(pending);
+                    context.ExecuteCommandBuffer(commandBuffer);
+                    CommandBufferPool.Release(commandBuffer);
                 }
             };
-
-            _customPassesVolumeGO = new GameObject("Capture.Volume.CustomPass");
-            _afterPostPassVolume = _customPassesVolumeGO.AddComponent<CustomPassVolume>();
-            _afterPostPassVolume.injectionPoint = CustomPassInjectionPoint.AfterPostProcess;
-            _afterPostPassVolume.customPasses.Add(colorCallbackPass);
         }
 #endif // HDRP_ENABLED
     }

@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Runtime.InteropServices;
 
 using UnityEngine;
@@ -13,6 +14,18 @@ public class UtilityTests
     public void ArrayCast_CastingToOtherArrayTypesDoesNotCopy()
     {
         foo();
+    }
+
+    [UnityTest]
+    public IEnumerator UnityVersionParsingTest()
+    {
+        var currentUnityVersion = Application.unityVersion;
+
+        Assert.IsTrue(GeneralUtilities.IsUnityVersionGreaterThanEqualTo(currentUnityVersion));
+        Assert.IsTrue(GeneralUtilities.IsUnityVersionGreaterThanEqualTo("2019.3.2f1"));
+        Assert.IsFalse(GeneralUtilities.IsUnityVersionGreaterThanEqualTo("2021.1.2f1"));
+
+        yield return null;
     }
 
     void foo()

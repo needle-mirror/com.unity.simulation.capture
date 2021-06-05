@@ -21,23 +21,19 @@ public class HeadlessCustomPlayerLoop
         public struct HeadlessServerLoopTypePostLateUpdateTwo { };
     }
 
+    private static string UNITY_VERSION_CHECK = "2020.3.8f1";
+
     public static RenderTexture headlessTexture;
     
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     static void Init()
     {
-        if (headlessTexture == null)
+        if (!GeneralUtilities.IsUnityVersionGreaterThanEqualTo(UNITY_VERSION_CHECK))
         {
-            var playerSettings = Resources.Load<PlayerResolutionSettings>("PlayerResolutionSettings");
-            if (playerSettings == null)
+            if (headlessTexture == null)	
             {
-                headlessTexture.width = 640;
-                headlessTexture.height = 480;
-                Log.W("Player Settings resolution scriptable object not found, loading default of 640X480");
-            }
-            else
-            {
-                if (playerSettings.renderTexture != null)
+                var playerSettings = Resources.Load<PlayerResolutionSettings>("PlayerResolutionSettings");
+                if (playerSettings != null && playerSettings.renderTexture != null)
                 {
                     headlessTexture = playerSettings.renderTexture;
                     headlessTexture.width = playerSettings.playerResolution.width;
@@ -45,17 +41,26 @@ public class HeadlessCustomPlayerLoop
                 }
                 else
                 {
-                    headlessTexture = new RenderTexture(playerSettings.playerResolution.width, playerSettings.playerResolution.height, 1);
+                    if (playerSettings == null)
+                    {
+                        headlessTexture = new RenderTexture(640, 480,1);
+                        Log.W("Player Settings resolution scriptable object not found, loading default of 640X480");
+                    }
+                    else
+                    {
+                        headlessTexture = new RenderTexture(playerSettings.playerResolution.width, playerSettings.playerResolution.height, 1);
+                    }
+                    
                 }
-            }
-            
-            if (headlessTexture.Create())
-            {
-                CloudGraphics.SetDefaultBackbufferSurface(headlessTexture);
-            }
-            else
-            {
-                Log.E("Failed to create a render texture for default backbuffer surface");
+
+                if (headlessTexture.Create())	
+                {	
+                    CloudGraphics.SetDefaultBackbufferSurface(headlessTexture);	
+                }	
+                else	
+                {	
+                    Log.E("Failed to create a render texture for default backbuffer surface");	
+                }	
             }
         }
         var loopSystem = GenerateCustomLoop();
@@ -92,8 +97,6 @@ public class HeadlessCustomPlayerLoop
             headlessRenderCamera.updateDelegate += () =>
             {
                 {
-                    GL.sRGBWrite = (QualitySettings.activeColorSpace == ColorSpace.Linear);
-
                     var cams = Camera.allCameras;
                     var offscreen = cams.Where(x => x.targetTexture != null);
                     var nonOffcreens = cams.Where(y => y.targetTexture == null);
@@ -101,11 +104,8 @@ public class HeadlessCustomPlayerLoop
                     foreach (var item in offscreen)
                     {
                         if (!item.enabled) continue;
-
                         item.Render();
                     }
-
-                    Graphics.SetRenderTarget(null);
 
                     foreach (var item in nonOffcreens)
                     {
