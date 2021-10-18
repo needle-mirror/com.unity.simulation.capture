@@ -670,8 +670,10 @@ namespace Unity.Simulation
                     case Channel.Color:
 #if URP_ENABLED
                         // Issue SIMPE-356: URP color channel is inverted with FXAA disabled, and PostProcessing enabled.
+                        // Issue SIMPE-400: URP disabled PP, and FXAA, but with MSAA..
                         var additionalCameraData = camera.GetComponent<UniversalAdditionalCameraData>();
-                        shouldFlipY = additionalCameraData.antialiasing != AntialiasingMode.FastApproximateAntialiasing && additionalCameraData.renderPostProcessing != false && SystemInfo.graphicsUVStartsAtTop;
+                        var ppaa = additionalCameraData.antialiasing != AntialiasingMode.FastApproximateAntialiasing && additionalCameraData.renderPostProcessing != false;
+                        shouldFlipY = SystemInfo.graphicsDeviceType == GraphicsDeviceType.Metal ? ppaa || SystemInfo.graphicsUVStartsAtTop : ppaa && SystemInfo.graphicsUVStartsAtTop;
 #else
                         shouldFlipY = !usePassedInRenderTargetId && camera.targetTexture == null && SystemInfo.graphicsUVStartsAtTop;
 #endif

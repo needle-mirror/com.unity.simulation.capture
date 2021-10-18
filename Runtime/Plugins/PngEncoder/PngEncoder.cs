@@ -5,6 +5,14 @@ using System.Runtime.InteropServices;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
 
+using Unity.Jobs;
+using Unity.Jobs.LowLevel.Unsafe;
+#if BURST_ENABLED
+using Unity.Burst;
+#endif
+using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
+
 public class PngEncoder 
 {
     [Flags]
@@ -119,6 +127,10 @@ public class PngEncoder
         int size = 0;
         var temp = new byte[raw.Length*2 + 1024];
 
+        // This .png compression library expects big endian inputs.
+        if (bitDepth == 16)
+            FlipShortEndianessInPlace(raw);
+
         var result = png_slz_compress(temp, ref size, raw, width, height, (int)colorType, bitDepth, (int)pngParam);
 
         if (result < 0)
@@ -156,6 +168,62 @@ public class PngEncoder
 
         colorType = (ColorType)nColorType;
         return imgData;
+    }
+
+#if BURST_ENABLED
+    [BurstCompile]
+#endif
+    struct FlipShortEndianessJob : IJob
+    {
+        [NativeDisableContainerSafetyRestriction]
+        public NativeSlice<byte> data;
+        public void Execute()
+        {
+            for (var i = 0; i < data.Length; i += 2)
+            {
+                var temp = data[i];
+                data[i] = data[i + 1];
+                data[i + 1] = temp;
+            }
+        }
+    }
+
+#if BURST_ENABLED
+    [BurstCompile]
+#endif
+    unsafe static void FlipShortEndianessInPlace(byte[] input)
+    {
+        fixed (byte* pInput = input)
+        {
+            var na = NativeArrayUnsafeUtility.ConvertExistingDataToNativeArray<byte>(pInput, input.Length, Allocator.TempJob);
+#if ENABLE_UNITY_COLLECTIONS_CHECKS
+            var safety = AtomicSafetyHandle.Create();
+            NativeArrayUnsafeUtility.SetAtomicSafetyHandle(ref na, safety);
+            AtomicSafetyHandle.SetAllowReadOrWriteAccess(safety, true);
+#endif
+            var batchCount = JobsUtility.JobWorkerMaximumCount;
+            var batchSize  = input.Length / batchCount;
+
+            var remaining = input.Length;
+            var index = 0;
+
+            var jobs = new NativeArray<JobHandle>(batchCount, Allocator.TempJob);
+            for (var i = 0; i < batchCount; ++i)
+            {
+                var length = batchSize < remaining ? batchSize : remaining;
+                jobs[i] = new FlipShortEndianessJob(){ data = new NativeSlice<byte>(na, index, length) }.Schedule();
+                remaining -= batchSize;
+                index += batchSize;
+            }
+
+            var job = JobHandle.CombineDependencies(jobs);
+            job.Complete();
+
+#if ENABLE_UNITY_COLLECTIONS_CHECKS
+            AtomicSafetyHandle.Release(safety);
+#endif
+            jobs.Dispose();
+        }
     }
 }
 #endif // !USIM_USE_BUILTIN_PNG_ENCODER

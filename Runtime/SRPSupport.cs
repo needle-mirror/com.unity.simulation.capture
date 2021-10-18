@@ -144,7 +144,7 @@ namespace Unity.Simulation
                 var pending = instance._pendingCameraRequests[camera];
                 foreach (var r in pending)
                 {
-#if !URP_ENABLED && !HDRP_ENABLED
+#if !HDRP_ENABLED
                     if (r.data.colorTrigger != null)
                     {
                         r.data.colorTrigger(null, default);
@@ -234,7 +234,8 @@ namespace Unity.Simulation
             var postCallbackPass = new URPCallbackPass("Unity Simulation URP AfterPost Pass", RenderPassEvent.AfterRenderingPostProcessing, new FilteringSettings(RenderQueueRange.all, -1));
             postCallbackPass.callback = (context, camera, commandBuffer) =>
             {
-                if (Application.isPlaying && instance._pendingCameraRequests.ContainsKey(camera))
+                if (SystemInfo.graphicsDeviceType != GraphicsDeviceType.Metal /* Issue SIMPE-400: URP disabled PP, and FXAA, but with MSAA. */ &&
+                    Application.isPlaying && instance._pendingCameraRequests.ContainsKey(camera))
                 {
                     var pending = instance._pendingCameraRequests[camera];
                     foreach (var r in pending)

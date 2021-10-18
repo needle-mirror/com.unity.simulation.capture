@@ -2,6 +2,8 @@ using System;
 using System.Collections;
 using System.Globalization;
 using System.IO;
+using System.Linq;
+using System.Threading;
 using UnityEngine;
 
 using Unity.Simulation;
@@ -47,6 +49,36 @@ public class DataLoggerTests
             yield return null;
         var fileInfo = new FileInfo(path);
         Assert.AreEqual(JsonUtility.ToJson(inputLog).Length + 1, fileInfo.Length);
+    }
+
+    [UnityTest]
+    [Timeout(10000)]
+    public IEnumerator ProducerBuffer_DoesNotProduceEmptyFiles_IfNoDataIsAppended()
+    {
+        string path = Path.Combine(Configuration.Instance.GetStoragePath(), "Logs", "log_0.txt");
+        var logger = new Logger("log.txt", 20);
+        logger.Flushall();
+        
+        yield return null;
+        
+        Assert.IsFalse(File.Exists(path));
+    }
+
+    [UnityTest]
+    [Timeout(10000)]
+    public IEnumerator ProducerBuffer_ProducesOnlyOneFile_WhenFlushCalledMultipleTimes()
+    {
+        string path = Path.Combine(Configuration.Instance.GetStoragePath(), "Logs", "log_0.txt");
+        var inputLog = new TestLog() {msg = "Test"};
+        var logger = new Logger("log.txt", 20);
+        logger.Log(inputLog);
+        ThreadPool.QueueUserWorkItem((cb) => logger.Flushall());
+        logger.Flushall();
+        yield return null;
+        var files = Directory.GetFiles(Path.Combine(Configuration.Instance.GetStoragePath(), "Logs")).Where(
+            f => f.EndsWith(".txt"));
+        Assert.IsTrue(files.Count() == 1, "Files Count : " +files.Count());
+        Assert.IsTrue(File.Exists(path));
     }
 
     [UnityTest]

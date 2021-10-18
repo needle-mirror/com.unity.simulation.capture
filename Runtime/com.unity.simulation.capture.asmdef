@@ -4,7 +4,8 @@
         "Unity.Simulation.Core",
         "Unity.RenderPipelines.Core.Runtime",
         "Unity.RenderPipelines.Universal.Runtime",
-        "Unity.RenderPipelines.HighDefinition.Runtime"
+        "Unity.RenderPipelines.HighDefinition.Runtime",
+        "Unity.Burst"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.0.10-preview.24] - 2021-10-18
+
+- Fixed new .png encoder 16bit inputs to be big endian.
+- Fixed issue SIMPE-400 URP/Metal with MSAA, but disabled FXAA and post processing produced blank images.
+- Added DataLogger tests.
+
 ## [0.0.10-preview.23] - 2021-06-05
 
 - Upate core dependency to 0.0.10-preview.24
