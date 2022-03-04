@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.0.10-preview.25] - 2022-03-04
+
+- Merging Simulataion Core package into Simulation Capture package.
+- Removing dependency on the Core package.
+- Deprecating support for USim.
+
 ## [0.0.10-preview.24] - 2021-10-18
 
 - Fixed new .png encoder 16bit inputs to be big endian.

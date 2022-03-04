@@ -23,7 +23,7 @@ public class DataLoggerTests
     [UnitySetUp]
     public IEnumerator CleanupExistingFiles()
     {
-        var path = Path.Combine(Configuration.Instance.GetStoragePath(), "Logs");
+        var path = Path.Combine(Application.persistentDataPath, "Logs");
         if (Directory.Exists(path))
         {
             var files = Directory.GetFiles(path);
@@ -40,7 +40,7 @@ public class DataLoggerTests
     [Timeout(10000)]
     public IEnumerator ProducerBuffer_TrimsEmptySpaces_IfPresentBeforeFlush()
     {
-        string path = Path.Combine(Configuration.Instance.GetStoragePath(), "Logs", "log_0.txt");
+        string path = Path.Combine(Application.persistentDataPath, "Logs", "log_0.txt");
         var inputLog = new TestLog() {msg = "Test"};
         var logger = new Logger("log.txt", 20);
         logger.Log(new TestLog() { msg = "Test"});
@@ -55,7 +55,7 @@ public class DataLoggerTests
     [Timeout(10000)]
     public IEnumerator ProducerBuffer_DoesNotProduceEmptyFiles_IfNoDataIsAppended()
     {
-        string path = Path.Combine(Configuration.Instance.GetStoragePath(), "Logs", "log_0.txt");
+        string path = Path.Combine(Application.persistentDataPath, "Logs", "log_0.txt");
         var logger = new Logger("log.txt", 20);
         logger.Flushall();
         
@@ -68,14 +68,14 @@ public class DataLoggerTests
     [Timeout(10000)]
     public IEnumerator ProducerBuffer_ProducesOnlyOneFile_WhenFlushCalledMultipleTimes()
     {
-        string path = Path.Combine(Configuration.Instance.GetStoragePath(), "Logs", "log_0.txt");
+        string path = Path.Combine(Application.persistentDataPath, "Logs", "log_0.txt");
         var inputLog = new TestLog() {msg = "Test"};
         var logger = new Logger("log.txt", 20);
         logger.Log(inputLog);
         ThreadPool.QueueUserWorkItem((cb) => logger.Flushall());
         logger.Flushall();
         yield return null;
-        var files = Directory.GetFiles(Path.Combine(Configuration.Instance.GetStoragePath(), "Logs")).Where(
+        var files = Directory.GetFiles(Path.Combine(Application.persistentDataPath, "Logs")).Where(
             f => f.EndsWith(".txt"));
         Assert.IsTrue(files.Count() == 1, "Files Count : " +files.Count());
         Assert.IsTrue(File.Exists(path));
@@ -87,7 +87,7 @@ public class DataLoggerTests
         var logger = new Logger("TestLog.txt", maxElapsedSeconds: 2);
         logger.Log(new TestLog() { msg = "Test 123"});
         yield return new WaitForSeconds(3);
-        var path = Path.Combine(Configuration.Instance.GetStoragePath(), "Logs", "TestLog_0.txt");
+        var path = Path.Combine(Application.persistentDataPath, "Logs", "TestLog_0.txt");
         Assert.IsTrue(File.Exists(path));
     }
 
@@ -97,7 +97,7 @@ public class DataLoggerTests
         var logger = new Logger("SimLog", bufferSize: 65536, maxElapsedSeconds:-1);
         logger.Log(new TestLog() { msg = "Test Simulation Log!"});
         yield return new WaitForSeconds(5);
-        var path = Path.Combine(Configuration.Instance.GetStoragePath(), "Logs", "SimLog_0.txt");
+        var path = Path.Combine(Application.persistentDataPath, "Logs", "SimLog_0.txt");
         Assert.IsTrue(!File.Exists(path));
         for (int i = 0; i < 100; i++)
         {
@@ -114,7 +114,7 @@ public class DataLoggerTests
     public IEnumerator DataLogger_TimestampSuffix()
     {
         var logger = new Logger("testLog", maxElapsedSeconds:-1, suffixOption: LoggerSuffixOption.TIME_STAMP);
-        var path = Path.Combine(Configuration.Instance.GetStoragePath(), "Logs");
+        var path = Path.Combine(Application.persistentDataPath, "Logs");
         logger.Log(new TestLog() { msg = "This is a test log with timestamp" });
         logger.Flushall(true);
         var files = Directory.GetFiles(path);
@@ -137,7 +137,7 @@ public class DataLoggerTests
     public IEnumerator DataLogger_TimestampAndSeqSuffix()
     {
         var logger = new Logger("testLog", bufferSize: 10, maxElapsedSeconds:-1, suffixOption: LoggerSuffixOption.BOTH);
-        var path = Path.Combine(Configuration.Instance.GetStoragePath(), "Logs");
+        var path = Path.Combine(Application.persistentDataPath, "Logs");
         logger.Log(new TestLog() { msg = "This is a test log with timestamp and seq" });
         logger.Log(new TestLog() { msg = "This is a another test log" });
         logger.Flushall(true);
@@ -163,7 +163,7 @@ public class DataLoggerTests
     public IEnumerator DataLogger_CustomFilenameSuffix()
     {
         var logger = new Logger("testLog", bufferSize: 10, maxElapsedSeconds:-1, customSuffix: () => DateTime.Now.ToString("yy-MM-dd"));
-        var path = Path.Combine(Configuration.Instance.GetStoragePath(), "Logs");
+        var path = Path.Combine(Application.persistentDataPath, "Logs");
         logger.Log(new TestLog() { msg = "This is a test log with timestamp and seq" });
         logger.Log(new TestLog() { msg = "This is a another test log" });
         logger.Flushall(true);

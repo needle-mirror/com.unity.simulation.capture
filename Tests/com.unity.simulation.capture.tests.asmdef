@@ -1,8 +1,8 @@
 {
     "name": "Unity.Simulation.Capture.Tests",
+    "rootNamespace": "",
     "references": [
         "Unity.Simulation.Capture",
-        "Unity.Simulation.Core",
         "Unity.PerformanceTesting",
         "com.unity.simulation.tools",
         "Unity.RenderPipelines.Universal.Runtime",
@@ -16,7 +16,8 @@
     "overrideReferences": true,
     "precompiledReferences": [
         "nunit.framework.dll",
-        "nunit.framework.dll"
+        "nunit.framework.dll",
+        "Newtonsoft.Json.dll"
     ],
     "autoReferenced": false,
     "defineConstraints": [

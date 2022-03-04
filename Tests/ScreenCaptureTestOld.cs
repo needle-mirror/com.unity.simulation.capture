@@ -16,7 +16,7 @@ public class ScreenCaptureTestOld : ScreenCaptureBase
 	private string UniqueFilename(int counter, int width, int height) 
     {
 		string timeStamp = System.DateTime.Now.ToString("yyyy_MM_dd_HH_mm_ss_fff");
-		string combinedPath = Path.Combine(Configuration.Instance.GetStoragePath() + "/Tests/");
+		string combinedPath = Path.Combine(Application.persistentDataPath + "/Tests/");
 		if (!Directory.Exists(combinedPath))
 			Directory.CreateDirectory(combinedPath);
 		var filename = string.Format("{0}/screen_{1}_{2}x{3}_{4}.jpg", combinedPath, timeStamp, width, height, counter);

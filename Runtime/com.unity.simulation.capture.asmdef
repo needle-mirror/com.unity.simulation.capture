@@ -1,5 +1,6 @@
 {
     "name": "Unity.Simulation.Capture",
+    "rootNamespace": "",
     "references": [
         "Unity.Simulation.Core",
         "Unity.RenderPipelines.Core.Runtime",
@@ -7,7 +8,14 @@
         "Unity.RenderPipelines.HighDefinition.Runtime",
         "Unity.Burst"
     ],
-    "includePlatforms": [],
+    "includePlatforms": [
+        "CloudRendering",
+        "Editor",
+        "LinuxStandalone64",
+        "macOSStandalone",
+        "WindowsStandalone32",
+        "WindowsStandalone64"
+    ],
     "excludePlatforms": [],
     "allowUnsafeCode": true,
     "overrideReferences": false,

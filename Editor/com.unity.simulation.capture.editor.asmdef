@@ -3,7 +3,8 @@
     "references": [
         "Unity.Simulation.Core",
         "Unity.RenderPipelines.Universal.Runtime",
-        "Unity.RenderPipelines.HighDefinition.Runtime"
+        "Unity.RenderPipelines.HighDefinition.Runtime",
+        "Unity.Simulation.Capture"
     ],
     "includePlatforms": [
         "Editor"

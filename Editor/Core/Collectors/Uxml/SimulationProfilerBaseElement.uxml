@@ -1,0 +1,18 @@
+﻿<UXML xmlns="UnityEngine.UIElements" xmlns:editor="UnityEditor.UIElements">
+    <VisualElement>
+        <Style src="../Uss/Styles.uss"/>
+        <VisualElement name="inspector-properties" style="margin-bottom: 4px;"/>
+        <VisualElement class="scenario__dark-viewport" >
+            <TextElement text="Simulation Profiler Properties" class="scenario__title-label"/>
+            <TextElement
+                class="scenario__info-box"
+                text="Simulation Profiler controls the execution of profiler collectors and their events."/>
+            <VisualElement name="constants-container">
+                <Foldout style="padding-left: 16px" text="Constants" name="constants-list" tooltip="A list of parameters for this scenario that will be JSON serialized in the configuration file."/>
+                <Toggle name="configuration-global-dispatchers" label="Global Dispatcher for collectors" binding-path="globalDispatcherOverride"/>
+                <editor:PropertyField name="configuration-file-name" label="Constants File Name" binding-path="serializedConstantsFileName"/>
+            </VisualElement>
+        </VisualElement>
+        <VisualElement name="collectors-list-placeholder" style = "margin-top: 10px"/>
+    </VisualElement>
+</UXML>
