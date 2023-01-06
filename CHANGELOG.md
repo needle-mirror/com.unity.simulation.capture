@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.0.10-preview.26] - 2023-01-06
+
+- Fixed package incompatibilities with the Linux Headless Simulation build target on more recent versions of Unity.
+
 ## [0.0.10-preview.25] - 2022-03-04
 
 - Merging Simulataion Core package into Simulation Capture package.

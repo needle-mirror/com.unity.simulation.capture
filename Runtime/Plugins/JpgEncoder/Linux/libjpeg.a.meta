@@ -56,6 +56,11 @@ PluginImporter:
       settings:
         CPU: AnyCPU
   - first:
+      LinuxHeadlessSimulation: CloudRendering
+    second:
+      enabled: 1
+      settings: {}
+  - first:
       Standalone: Linux
     second:
       enabled: 1

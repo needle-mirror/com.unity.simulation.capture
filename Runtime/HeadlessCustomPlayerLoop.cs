@@ -11,7 +11,7 @@ using UnityEngine;
 using UnityEngine.LowLevel;
 using UnityEngine.PlayerLoop;
 
-using UnityEngine.CloudRendering;
+
 
 public class HeadlessCustomPlayerLoop
 {
@@ -55,7 +55,7 @@ public class HeadlessCustomPlayerLoop
 
                 if (headlessTexture.Create())	
                 {	
-                    CloudGraphics.SetDefaultBackbufferSurface(headlessTexture);	
+                    UnityEngine.LinuxHeadlessSimulation.CloudGraphics.SetDefaultBackbufferSurface(headlessTexture);	
                 }	
                 else	
                 {	
